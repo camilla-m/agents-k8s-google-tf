@@ -129,14 +129,6 @@ resource "google_container_cluster" "adk_cluster" {
     }
   }
 
-  # Enable network policy for security
-  dynamic "network_policy" {
-    for_each = var.enable_network_policy ? [1] : []
-    content {
-      enabled = true
-    }
-  }
-
   # Enable workload identity for secure pod-to-GCP communication
   workload_identity_config {
     workload_pool = "${var.project_id}.svc.id.goog"
@@ -153,15 +145,6 @@ resource "google_container_cluster" "adk_cluster" {
     }
     horizontal_pod_autoscaling {
       disabled = false
-    }
-    dynamic "network_policy_config" {
-      for_each = var.enable_network_policy ? [1] : []
-      content {
-        disabled = false
-      }
-    }
-    gcp_filestore_csi_driver_config {
-      enabled = false # Not needed for ADK workloads
     }
     gcs_fuse_csi_driver_config {
       enabled = false # Not needed for ADK workloads
@@ -181,10 +164,7 @@ resource "google_container_cluster" "adk_cluster" {
     component   = "gke-cluster"
     workload    = "adk-travel-system"
   })
-
-  # Enable shielded nodes for additional security
-  enable_shielded_nodes = true
-
+  
   # Binary authorization (disabled for development, enable in production)
   binary_authorization {
     evaluation_mode = "DISABLED"
