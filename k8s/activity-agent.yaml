@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: activity-agent
+  namespace: adk-travel
+  labels:
+    app: activity-agent
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: activity-agent
+  template:
+    metadata:
+      labels:
+        app: activity-agent
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: adk-agents
+      containers:
+      - name: activity-agent
+        image: gcr.io/PROJECT_ID/activity-agent:latest
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 8090
+          name: metrics
+        env:
+        - name: AGENT_TYPE
+          value: "activity"
+        - name: METRICS_PORT
+          value: "8090"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: activity-agent
+  namespace: adk-travel
+  labels:
+    app: activity-agent
+spec:
+  selector:
+    app: activity-agent
+  ports:
+  - port: 80
+    targetPort: 8080
+    name: http
+  - port: 8090
+    targetPort: 8090
+    name: metrics
+  type: ClusterIP

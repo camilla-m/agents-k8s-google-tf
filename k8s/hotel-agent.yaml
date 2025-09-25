@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hotel-agent
+  namespace: adk-travel
+  labels:
+    app: hotel-agent
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: hotel-agent
+  template:
+    metadata:
+      labels:
+        app: hotel-agent
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: adk-agents
+      containers:
+      - name: hotel-agent
+        image: gcr.io/PROJECT_ID/hotel-agent:latest
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 8090
+          name: metrics
+        env:
+        - name: AGENT_TYPE
+          value: "hotel"
+        - name: METRICS_PORT
+          value: "8090"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hotel-agent
+  namespace: adk-travel
+  labels:
+    app: hotel-agent
+spec:
+  selector:
+    app: hotel-agent
+  ports:
+  - port: 80
+    targetPort: 8080
+    name: http
+  - port: 8090
+    targetPort: 8090
+    name: metrics
+  type: ClusterIP
