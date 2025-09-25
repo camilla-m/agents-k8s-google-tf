@@ -4,6 +4,10 @@
 
 set -e
 
+# Get script directory and project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
 PROJECT_ID=${1:-"your-gcp-project-id"}
 REGION=${2:-"us-central1"}
 CLUSTER_NAME=${3:-"adk-travel-cluster"}
@@ -12,32 +16,71 @@ echo "🚀 Deploying ADK Travel System to GKE"
 echo "Project: $PROJECT_ID"
 echo "Region: $REGION"
 echo "Cluster: $CLUSTER_NAME"
+echo "Script dir: $SCRIPT_DIR"
+echo "Project root: $PROJECT_ROOT"
 
 # Set project
 gcloud config set project $PROJECT_ID
+
+# Navigate to project root
+cd "$PROJECT_ROOT"
+
+# Check if Dockerfile exists
+if [ ! -f "Dockerfile" ]; then
+    echo "❌ Dockerfile not found in $PROJECT_ROOT"
+    exit 1
+fi
+
+echo "✅ Dockerfile found, building images..."
 
 # Build and push Docker images
 echo "📦 Building Docker images..."
 
 # Build flight agent
-docker build -t gcr.io/$PROJECT_ID/flight-agent:latest -f Dockerfile .
+echo "Building flight-agent..."
+docker build -t gcr.io/$PROJECT_ID/flight-agent:latest \
+  --build-arg AGENT_TYPE=flight \
+  -f Dockerfile .
 docker push gcr.io/$PROJECT_ID/flight-agent:latest
 
 # Build hotel agent  
-docker build -t gcr.io/$PROJECT_ID/hotel-agent:latest -f Dockerfile .
+echo "Building hotel-agent..."
+docker build -t gcr.io/$PROJECT_ID/hotel-agent:latest \
+  --build-arg AGENT_TYPE=hotel \
+  -f Dockerfile .
 docker push gcr.io/$PROJECT_ID/hotel-agent:latest
 
 # Build activity agent
-docker build -t gcr.io/$PROJECT_ID/activity-agent:latest -f Dockerfile .
+echo "Building activity-agent..."
+docker build -t gcr.io/$PROJECT_ID/activity-agent:latest \
+  --build-arg AGENT_TYPE=activity \
+  -f Dockerfile .
 docker push gcr.io/$PROJECT_ID/activity-agent:latest
 
 # Build travel coordinator
-docker build -t gcr.io/$PROJECT_ID/travel-coordinator:latest -f Dockerfile .
+echo "Building travel-coordinator..."
+docker build -t gcr.io/$PROJECT_ID/travel-coordinator:latest \
+  --build-arg AGENT_TYPE=coordinator \
+  -f Dockerfile .
 docker push gcr.io/$PROJECT_ID/travel-coordinator:latest
 
 # Update Kubernetes manifests with project ID
 echo "📝 Updating Kubernetes manifests..."
-sed -i "s/PROJECT_ID/$PROJECT_ID/g" k8s/*.yaml
+if [ -d "k8s" ]; then
+    # Create backup of original manifests
+    cp -r k8s k8s.backup.$(date +%s) 2>/dev/null || true
+    
+    # Replace PROJECT_ID in all yaml files
+    find k8s -name "*.yaml" -exec sed -i.bak "s/PROJECT_ID/$PROJECT_ID/g" {} \;
+    
+    # Remove backup files
+    find k8s -name "*.bak" -delete
+    
+    echo "✅ Kubernetes manifests updated"
+else
+    echo "❌ k8s directory not found"
+    exit 1
+fi
 
 # Get GKE credentials
 echo "🔐 Getting GKE credentials..."
@@ -56,12 +99,7 @@ echo "🌐 Service endpoints:"
 kubectl get services -n adk-travel
 
 echo "✅ Deployment complete!"
-echo "Access the travel coordinator at the LoadBalancer IP"
-
-# Test deployment
-echo "🧪 Testing deployment..."
-COORDINATOR_IP=$(kubectl get service travel-coordinator -n adk-travel -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-if [ ! -z "$COORDINATOR_IP" ]; then
-    echo "Testing health endpoint..."
-    curl -f http://$COORDINATOR_IP/health || echo "Health check failed"
-fi
+echo ""
+echo "🎯 Next steps:"
+echo "kubectl port-forward service/travel-coordinator 8080:80 -n adk-travel"
+echo "python scripts/test_demo.py"
