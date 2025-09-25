@@ -1,5 +1,16 @@
 # Demo Commands for Presentation
 
+# Instructions
+
+1. Activate APIs!
+```
+gcloud services enable container.googleapis.com          # GKE
+gcloud services enable compute.googleapis.com            # VMs for nodes  
+gcloud services enable containerregistry.googleapis.com  # Docker images
+```
+2. Run `terraform init` and `terraform apply` at terraform folder.
+3. Run script `deploy.sh`.
+
 # 1. Check cluster status
 kubectl get nodes
 kubectl get pods -n adk-travel
