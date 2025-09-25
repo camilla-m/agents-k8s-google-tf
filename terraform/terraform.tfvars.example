@@ -1,0 +1,92 @@
+# Required variables
+project_id = "descomplicando-devops"
+region     = "us-central1"
+
+# Cluster configuration
+cluster_name     = "adk-travel-cluster"
+namespace        = "adk-travel"
+node_count       = 3
+machine_type     = "e2-standard-4"
+disk_size_gb     = 100
+
+# Autoscaling
+enable_autoscaling = true
+min_node_count     = 1
+max_node_count     = 5
+
+# Network configuration
+network_name         = "adk-travel-vpc"
+subnet_name         = "adk-travel-subnet"
+vpc_cidr_range      = "10.0.0.0/16"
+pod_cidr_range      = "10.1.0.0/16"
+services_cidr_range = "10.2.0.0/16"
+master_ipv4_cidr_block = "172.16.0.0/28"
+
+# Master authorized networks
+master_authorized_networks = [
+  {
+    cidr_block   = "0.0.0.0/0"
+    display_name = "All"
+  }
+]
+
+# Features
+enable_ip_alias         = true
+enable_private_nodes    = true
+enable_network_policy   = true
+enable_workload_identity = true
+enable_autopilot       = false
+
+# Database configuration
+enable_cloud_sql    = true
+db_name            = "adk_travel_db"
+db_user            = "adk_user"
+db_password        = "$(openssl rand -base64 12 2>/dev/null || echo 'ChangeMeSecure123!')AdK"
+db_instance_tier   = "db-f1-micro"
+db_disk_size       = 20
+
+# Monitoring and logging
+enable_monitoring = true
+enable_logging    = true
+log_retention_days = 30
+
+# Maintenance
+maintenance_start_time = "02:00"
+backup_start_time     = "01:00"
+backup_enabled        = true
+
+# Node configuration
+enable_autorepair    = true
+enable_autoupgrade   = true
+enable_shielded_nodes = true
+preemptible         = false
+
+# Resource labels
+resource_labels = {
+  project     = "adk-travel"
+  environment = "development"
+  managed-by  = "terraform"
+  team        = "ai-agents"
+}
+
+labels = {
+  project     = "adk-travel"
+  environment = "development"
+  managed-by  = "terraform"
+  team        = "ai-agents"
+}
+
+# Environment
+environment = "development"
+
+# Service account
+service_account_name = "adk-travel-sa"
+
+# Security
+enable_ssh_access   = true
+enable_http_access  = true
+enable_https_access = true
+
+# Monitoring
+enable_uptime_checks = false
+notification_channels = []
