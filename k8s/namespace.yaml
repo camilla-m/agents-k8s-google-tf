@@ -4,3 +4,11 @@ metadata:
   name: adk-travel
   labels:
     name: adk-travel
+    app: google-adk
+    version: "1.0"
+    environment: production
+    managed-by: terraform
+  annotations:
+    description: "Google ADK Travel System - Multi-agent travel planning with Kubernetes"
+    contact: "devops-team@company.com"
+    documentation: "https://github.com/company/google-adk-kubernetes"

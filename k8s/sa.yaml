@@ -4,26 +4,68 @@ metadata:
   name: adk-agents
   namespace: adk-travel
   labels:
-    app: adk-travel
+    app: google-adk
+    component: serviceaccount
+    version: "1.0"
+  annotations:
+    description: "Service account for Google ADK agents with necessary permissions"
+
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   namespace: adk-travel
   name: adk-agents-role
+  labels:
+    app: google-adk
+    component: rbac
+    version: "1.0"
 rules:
+# Allow reading pods and services for inter-agent communication and health checks
 - apiGroups: [""]
   resources: ["pods", "services", "endpoints"]
   verbs: ["get", "list", "watch"]
+
+# Allow creating events for logging and monitoring
 - apiGroups: [""]
   resources: ["events"]
   verbs: ["create", "patch"]
+
+# Allow reading configmaps for configuration
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch"]
+
+# Allow reading secrets for credentials
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list"]
+
+# Allow updating own pod status for health reporting
+- apiGroups: [""]
+  resources: ["pods/status"]
+  verbs: ["patch", "update"]
+
+# Allow reading deployment information for scaling decisions
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["get", "list", "watch"]
+
+# Allow reading HPA for auto-scaling information
+- apiGroups: ["autoscaling"]
+  resources: ["horizontalpodautoscalers"]
+  verbs: ["get", "list", "watch"]
+
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: adk-agents-binding
   namespace: adk-travel
+  labels:
+    app: google-adk
+    component: rbac
+    version: "1.0"
 subjects:
 - kind: ServiceAccount
   name: adk-agents
@@ -31,4 +73,43 @@ subjects:
 roleRef:
   kind: Role
   name: adk-agents-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# ClusterRole for reading nodes (for monitoring and resource awareness)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: adk-agents-cluster-role
+  labels:
+    app: google-adk
+    component: rbac
+    version: "1.0"
+rules:
+# Allow reading node information for resource monitoring
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch"]
+
+# Allow reading metrics for monitoring
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["nodes", "pods"]
+  verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: adk-agents-cluster-binding
+  labels:
+    app: google-adk
+    component: rbac
+    version: "1.0"
+subjects:
+- kind: ServiceAccount
+  name: adk-agents
+  namespace: adk-travel
+roleRef:
+  kind: ClusterRole
+  name: adk-agents-cluster-role
   apiGroup: rbac.authorization.k8s.io
