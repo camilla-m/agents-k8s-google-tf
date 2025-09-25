@@ -51,6 +51,8 @@ resource "google_container_cluster" "adk_cluster" {
   # Enable autopilot for better resource management
   enable_autopilot = true
 
+  # Network configuration
+  network    = google_compute_network.vpc.name
   subnetwork = google_compute_subnetwork.subnet.name
 
   # Master authorized networks
@@ -59,11 +61,6 @@ resource "google_container_cluster" "adk_cluster" {
       cidr_block = "0.0.0.0/0"
       display_name = "All"
     }
-  }
-
-  # Enable network policy
-  network_policy {
-    enabled = true
   }
 
   # Enable workload identity
