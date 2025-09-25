@@ -100,8 +100,6 @@ resource "google_container_cluster" "adk_cluster" {
   name     = var.cluster_name
   location = var.region
   
-  # Remove default node pool immediately after cluster creation
-  remove_default_node_pool = true
   initial_node_count       = 1
   
   # Enable Autopilot for simplified management and better resource efficiency
