@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# ADK Travel Agents - Deploy Script (Current Structure)
-# Adapted for: Dockerfile in root, src/ folder, k8s/ manifests
+# ADK Travel Agents - Deploy Script (Modified to go up one directory)
+# Adapted for: Dockerfile in parent directory, src/ folder, k8s/ manifests
 # Usage: ./scripts/deploy-current-structure.sh PROJECT_ID [REGION] [CLUSTER_NAME]
 
 set -e
@@ -40,11 +40,11 @@ print_error() {
 if [ $# -lt 1 ] || [ $# -gt 3 ]; then
     echo "Usage: $0 PROJECT_ID [REGION] [CLUSTER_NAME]"
     echo ""
-    echo "Current project structure expected:"
+    echo "Project structure expected (one level up from scripts/):"
     echo "  ├── Dockerfile          # Main Dockerfile in root"
     echo "  ├── src/               # Application source code"
     echo "  ├── k8s/               # Kubernetes manifests"
-    echo "  └── scripts/           # This script"
+    echo "  └── scripts/           # This script location"
     echo ""
     exit 1
 fi
@@ -53,25 +53,56 @@ PROJECT_ID="$1"
 REGION="${2:-$DEFAULT_REGION}"
 CLUSTER_NAME="${3:-$DEFAULT_CLUSTER_NAME}"
 
-print_status "🚀 Deploying ADK Travel (Current Structure)"
+print_status "🚀 Deploying ADK Travel (Modified Structure)"
 print_status "Project: $PROJECT_ID"
 print_status "Region: $REGION"
 print_status "Cluster: $CLUSTER_NAME"
 
+# Store current directory and move to parent directory
+SCRIPT_DIR="$(pwd)"
+print_status "📍 Current directory: $SCRIPT_DIR"
+
+# Go up one directory to find project files
+cd ..
+PROJECT_ROOT="$(pwd)"
+print_status "📁 Moving to project root: $PROJECT_ROOT"
+
 # Check project structure
 print_status "🔍 Checking project structure..."
+print_status "Looking for files in: $(pwd)"
+
+# Debug: Show current directory contents
+print_status "Directory contents:"
+ls -la
+
 MISSING_ITEMS=()
 
 if [ ! -f "Dockerfile" ]; then
-    MISSING_ITEMS+=("Dockerfile (in root)")
+    print_status "Dockerfile not found, searching in current directory..."
+    if [ -f "./Dockerfile" ]; then
+        print_status "Found ./Dockerfile"
+    else
+        find . -maxdepth 2 -name "Dockerfile" -type f | head -3
+        MISSING_ITEMS+=("Dockerfile (in root)")
+    fi
+else
+    print_status "✅ Found Dockerfile"
 fi
 
 if [ ! -d "src" ]; then
+    print_status "src/ directory not found, searching..."
+    find . -maxdepth 2 -type d -name "*src*" | head -3
     MISSING_ITEMS+=("src/ directory")
+else
+    print_status "✅ Found src/ directory"
 fi
 
 if [ ! -d "k8s" ]; then
+    print_status "k8s/ directory not found, searching..."
+    find . -maxdepth 2 -type d -name "*k8s*" -o -name "*kube*" | head -3
     MISSING_ITEMS+=("k8s/ directory")
+else
+    print_status "✅ Found k8s/ directory"
 fi
 
 if [ ${#MISSING_ITEMS[@]} -gt 0 ]; then
@@ -162,8 +193,9 @@ IMAGE_TAG="$REGISTRY_URL/$IMAGE_NAME:$(date +%Y%m%d-%H%M%S)"
 IMAGE_LATEST="$REGISTRY_URL/$IMAGE_NAME:latest"
 
 print_status "Building image: $IMAGE_TAG"
+print_status "Building from directory: $(pwd)"
 
-# Build from root directory using the Dockerfile
+# Build from current directory (which is now the parent directory)
 if docker build -t "$IMAGE_TAG" -t "$IMAGE_LATEST" .; then
     print_success "✅ Docker image built successfully"
 else
@@ -306,15 +338,19 @@ if [ "$FAILED_PODS" -gt 0 ]; then
     kubectl get events -n "$NAMESPACE" --sort-by='.lastTimestamp' | tail -10
 fi
 
+# Return to original directory for saving deployment info
+cd "$SCRIPT_DIR"
+
 # Save deployment information
-cat > current-deployment-info.txt << EOF
-ADK Travel - Current Structure Deployment
-========================================
+cat > deployment-info.txt << EOF
+ADK Travel - Modified Structure Deployment
+==========================================
 Timestamp: $(date)
 Project: $PROJECT_ID
 Region: $REGION  
 Cluster: $CLUSTER_NAME
 Namespace: $NAMESPACE
+Project Root: $PROJECT_ROOT
 
 Docker Image: $IMAGE_TAG
 Registry URL: $REGISTRY_URL
@@ -339,15 +375,18 @@ kubectl logs -f deployment/$(kubectl get deployments -n $NAMESPACE -o jsonpath='
 kubectl get events -n $NAMESPACE --sort-by='.lastTimestamp'
 
 Structure Used:
-✅ Dockerfile in root
+✅ Script executed from scripts/ directory
+✅ Files found in parent directory: $PROJECT_ROOT
+✅ Dockerfile in project root
 ✅ Source code in src/
 ✅ Kubernetes manifests in k8s/
 EOF
 
 print_success "✅ Deployment completed!"
-print_status "📄 Deployment info saved to: current-deployment-info.txt"
+print_status "📄 Deployment info saved to: $SCRIPT_DIR/deployment-info.txt"
 
 # Final status
+cd "$PROJECT_ROOT"
 RUNNING_PODS=$(kubectl get pods -n "$NAMESPACE" --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l)
 TOTAL_PODS=$(kubectl get pods -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l)
 
@@ -371,3 +410,6 @@ print_status "🔍 To troubleshoot, check:"
 echo "kubectl get all -n $NAMESPACE"
 echo "kubectl describe pods -n $NAMESPACE"
 echo "kubectl logs -l app=adk-travel -n $NAMESPACE"
+
+# Return to original directory
+cd "$SCRIPT_DIR"
