@@ -21,7 +21,7 @@ spec:
       containers:
       - name: adk-travel
         # Imagem única construída do root Dockerfile com código de src/
-        image: REGION-docker.pkg.dev/PROJECT_ID/adk-travel/adk-travel-app:latest
+        image: us-central1-docker.pkg.dev/descomplicando-devops/adk-travel/adk-travel-app:latest
         ports:
         - containerPort: 8080
           name: http
