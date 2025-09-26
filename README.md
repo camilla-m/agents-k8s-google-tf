@@ -1,10 +1,9 @@
-# 🚀 ADK Travel Agents - Simplified
+# 🚀 ADK Travel Agents
 
 A simple, scalable AI-powered travel assistant system built with:
 - **Google AI Platform (ADK)** for intelligent responses
 - **Google Kubernetes Engine (GKE)** for container orchestration  
 - **Terraform** for infrastructure as code
-- **No database dependencies** - pure AI agent interactions
 
 Based on the [camilla-m/agents-k8s-google-tf](https://github.com/camilla-m/agents-k8s-google-tf) repository, simplified for easy deployment and demo purposes.
 
@@ -28,29 +27,6 @@ cd adk-travel-agents
 # 3. Test the agents
 kubectl port-forward service/travel-coordinator 8080:80 -n adk-travel
 curl -X POST http://localhost:8080/chat -H "Content-Type: application/json" -d '{"message": "Plan a trip to Tokyo"}'
-```
-
-## 📁 Project Structure
-
-```
-adk-travel-agents/
-├── terraform/           # Infrastructure as Code
-│   ├── main.tf         # GKE cluster + AI Platform
-│   ├── variables.tf    # Configuration variables
-│   └── outputs.tf      # Deployment outputs
-├── k8s/                # Kubernetes manifests
-│   ├── namespace.yaml  # adk-travel namespace
-│   ├── rbac.yaml       # Service accounts & permissions
-│   ├── configmap.yaml  # Environment configuration
-│   └── deployments/    # Agent deployments
-├── docker/             # Container definitions
-│   ├── flight-agent/   # Flight search agent
-│   └── coordinator/    # Travel coordination agent
-└── scripts/            # Automation scripts
-    ├── deploy.sh       # Main deployment
-    ├── setup.sh        # One-click setup
-    ├── test_adk_demo.py # Automated testing
-    └── cleanup.sh      # Resource cleanup
 ```
 
 ## 🧪 Testing the Agents
@@ -102,7 +78,7 @@ curl -X POST http://localhost:8080/plan \
 - ✅ **Cloud-Native** - Built for Google Cloud Platform
 - ✅ **AI-Powered** - Uses Google's latest AI models
 - ✅ **Simple** - Easy to deploy and understand
-- ✅ **Production-Ready** - Health checks, monitoring, RBAC
+- ✅ **Production-Ready** - Health checks, monitoring
 
 ## 🛠️ Prerequisites
 
@@ -134,7 +110,6 @@ python3 scripts/test_adk_demo.py --quick       # Quick tests
 ## 🔐 Security
 
 - **Workload Identity** for secure GCP service authentication
-- **RBAC** with minimal required permissions
 - **Network policies** for pod-to-pod communication
 - **Non-root containers** for enhanced security
 
@@ -142,7 +117,6 @@ python3 scripts/test_adk_demo.py --quick       # Quick tests
 
 - **Preemptible nodes** in development environment
 - **Horizontal Pod Autoscaling** to scale based on demand
-- **No persistent storage** costs (no databases)
 - **Efficient resource requests** and limits
 
 ## 🚨 Troubleshooting
@@ -197,10 +171,6 @@ curl -X POST http://localhost:8080/chat -H "Content-Type: application/json" \
 # 4. Show real-time logs
 kubectl logs -f deployment/travel-coordinator -n adk-travel --tail=10
 ```
-
-## 📝 License
-
-This project is based on the work from [camilla-m/agents-k8s-google-tf](https://github.com/camilla-m/agents-k8s-google-tf) and simplified for educational and demo purposes.
 
 ## 🤝 Contributing
 
