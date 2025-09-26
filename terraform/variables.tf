@@ -72,44 +72,6 @@ variable "resource_labels" {
   }
 }
 
-# Database configuration
-variable "db_password" {
-  description = "Password for the database user"
-  type        = string
-  default     = "changeme123!"
-  sensitive   = true
-}
-
-variable "enable_cloud_sql" {
-  description = "Enable Cloud SQL instance"
-  type        = bool
-  default     = true
-}
-
-variable "db_name" {
-  description = "Database name"
-  type        = string
-  default     = "adk_travel_db"
-}
-
-variable "db_user" {
-  description = "Database username"
-  type        = string
-  default     = "adk_user"
-}
-
-variable "db_instance_tier" {
-  description = "Database instance tier"
-  type        = string
-  default     = "db-f1-micro"
-}
-
-variable "db_disk_size" {
-  description = "Database disk size in GB"
-  type        = number
-  default     = 20
-}
-
 # Node configuration
 variable "node_count" {
   description = "Number of nodes in the default node pool"

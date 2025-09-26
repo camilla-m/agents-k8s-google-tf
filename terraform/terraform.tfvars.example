@@ -37,14 +37,6 @@ enable_network_policy   = true
 enable_workload_identity = true
 enable_autopilot       = false
 
-# Database configuration
-enable_cloud_sql    = true
-db_name            = "adk_travel_db"
-db_user            = "adk_user"
-db_password        = "$(openssl rand -base64 12 2>/dev/null || echo 'ChangeMeSecure123!')AdK"
-db_instance_tier   = "db-f1-micro"
-db_disk_size       = 20
-
 # Monitoring and logging
 enable_monitoring = true
 enable_logging    = true
