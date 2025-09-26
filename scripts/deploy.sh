@@ -1,24 +1,23 @@
 #!/bin/bash
 
-# Deploy script for ADK Travel Agents on GKE with Terraform
-# Usage: ./scripts/deploy.sh PROJECT_ID [REGION]
+# ADK Travel Agents - Deploy Only Script
+# Assumes cluster and infrastructure already exist
+# Usage: ./scripts/deploy-only.sh PROJECT_ID [REGION] [CLUSTER_NAME]
 
-set -e  # Exit on any error
+set -e
 
-# Colors for output
-RED='\033[0;31m'
+# Colors
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
 
 # Default values
 DEFAULT_REGION="us-central1"
 DEFAULT_CLUSTER_NAME="adk-travel-cluster"
 NAMESPACE="adk-travel"
-SERVICE_ACCOUNT_NAME="adk-travel-sa"
 
-# Function to print colored output
 print_status() {
     echo -e "${BLUE}[INFO]${NC} $1"
 }
@@ -33,288 +32,221 @@ print_warning() {
 
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
-}
-
-# Function to check if command exists
-check_command() {
-    if ! command -v $1 &> /dev/null; then
-        print_error "$1 is not installed. Please install it first."
-        exit 1
-    fi
-}
-
-# Function to show usage
-usage() {
-    echo "Usage: $0 PROJECT_ID [REGION]"
-    echo ""
-    echo "Arguments:"
-    echo "  PROJECT_ID    Google Cloud Project ID (required)"
-    echo "  REGION        Google Cloud Region (optional, default: us-central1)"
-    echo ""
-    echo "Examples:"
-    echo "  $0 my-gcp-project"
-    echo "  $0 my-gcp-project us-west1"
     exit 1
 }
 
-# Validate arguments
-if [ $# -lt 1 ] || [ $# -gt 2 ]; then
-    usage
+# Validation
+if [ $# -lt 1 ] || [ $# -gt 3 ]; then
+    echo "Usage: $0 PROJECT_ID [REGION] [CLUSTER_NAME]"
+    echo ""
+    echo "This script assumes:"
+    echo "  - GKE cluster already exists"
+    echo "  - Artifact Registry repository exists" 
+    echo "  - Service accounts are configured"
+    echo "  - APIs are enabled"
+    echo ""
+    exit 1
 fi
 
 PROJECT_ID="$1"
 REGION="${2:-$DEFAULT_REGION}"
+CLUSTER_NAME="${3:-$DEFAULT_CLUSTER_NAME}"
 
-print_status "Starting deployment for project: ${PROJECT_ID} in region: ${REGION}"
+print_status "🚀 Deploying ADK Travel Agents (Apps Only)"
+print_status "Project: $PROJECT_ID"
+print_status "Region: $REGION"
+print_status "Cluster: $CLUSTER_NAME"
 
-# Validate project ID format
-if [[ ! $PROJECT_ID =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]$ ]]; then
-    print_error "Invalid project ID format. Project ID must be 6-30 characters, start with lowercase letter, and contain only lowercase letters, digits, and hyphens."
-    exit 1
-fi
-
-# Check required tools
-print_status "Checking required tools..."
-check_command "gcloud"
-check_command "kubectl"
-check_command "terraform"
-check_command "docker"
-
-# Set gcloud project
-print_status "Setting up gcloud configuration..."
-gcloud config set project "${PROJECT_ID}"
-
-# Enable required APIs
-print_status "Enabling required Google Cloud APIs..."
-gcloud services enable \
-    container.googleapis.com \
-    compute.googleapis.com \
-    artifactregistry.googleapis.com \
-    aiplatform.googleapis.com \
-    --quiet
-
-# Create service account if it doesn't exist
-print_status "Creating service account..."
-if ! gcloud iam service-accounts describe "${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" &>/dev/null; then
-    gcloud iam service-accounts create "${SERVICE_ACCOUNT_NAME}" \
-        --display-name="ADK Travel Service Account" \
-        --description="Service account for ADK Travel agents"
-else
-    print_warning "Service account ${SERVICE_ACCOUNT_NAME} already exists, skipping creation."
-fi
-
-# Assign IAM roles to service account
-print_status "Assigning IAM roles..."
-ROLES=(
-    "roles/aiplatform.user"
-    "roles/storage.objectViewer"
-    "roles/logging.logWriter"
-    "roles/monitoring.metricWriter"
-    "roles/container.developer"
-)
-
-for role in "${ROLES[@]}"; do
-    gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
-        --member="serviceAccount:${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" \
-        --role="${role}" \
-        --quiet
+# Check prerequisites
+print_status "Checking prerequisites..."
+for cmd in gcloud kubectl docker; do
+    if ! command -v $cmd &> /dev/null; then
+        print_error "$cmd is required but not installed"
+    fi
 done
 
-# Create service account key if it doesn't exist
-KEY_FILE="adk-key.json"
-if [ ! -f "${KEY_FILE}" ]; then
-    print_status "Creating service account key..."
-    gcloud iam service-accounts keys create "${KEY_FILE}" \
-        --iam-account="${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
-else
-    print_warning "Service account key file already exists, skipping creation."
+# Set project
+gcloud config set project "$PROJECT_ID" --quiet
+
+# Verify cluster exists and get credentials
+print_status "Connecting to existing cluster..."
+if ! gcloud container clusters describe "$CLUSTER_NAME" --region="$REGION" &>/dev/null; then
+    print_error "Cluster '$CLUSTER_NAME' not found in region '$REGION'"
 fi
 
-# Initialize and apply Terraform
-print_status "Initializing Terraform..."
-cd terraform
+gcloud container clusters get-credentials "$CLUSTER_NAME" \
+    --region="$REGION" \
+    --project="$PROJECT_ID"
 
-# Create terraform.tfvars if it doesn't exist
-TFVARS_FILE="terraform.tfvars"
-if [ ! -f "${TFVARS_FILE}" ]; then
-    print_status "Creating terraform.tfvars file..."
-    cat > "${TFVARS_FILE}" << EOF
-project_id = "${PROJECT_ID}"
-region     = "${REGION}"
-cluster_name = "${DEFAULT_CLUSTER_NAME}"
-namespace = "${NAMESPACE}"
-EOF
-else
-    print_warning "terraform.tfvars already exists, please verify its contents."
+print_success "Connected to cluster $CLUSTER_NAME"
+
+# Verify namespace exists
+print_status "Checking namespace..."
+if ! kubectl get namespace "$NAMESPACE" &>/dev/null; then
+    print_warning "Namespace '$NAMESPACE' not found, creating it..."
+    kubectl create namespace "$NAMESPACE"
 fi
 
-# Initialize Terraform
-terraform init
+# Verify Artifact Registry repository exists
+REGISTRY_URL="$REGION-docker.pkg.dev/$PROJECT_ID/adk-travel"
+print_status "Checking Artifact Registry..."
+if ! gcloud artifacts repositories describe adk-travel --location="$REGION" &>/dev/null; then
+    print_error "Artifact Registry repository 'adk-travel' not found in $REGION"
+fi
 
-# Validate Terraform configuration
-print_status "Validating Terraform configuration..."
-terraform validate
+# Configure Docker authentication
+print_status "Configuring Docker authentication..."
+gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
 
-# Plan Terraform deployment
-print_status "Planning Terraform deployment..."
-terraform plan -var="project_id=${PROJECT_ID}" -var="region=${REGION}"
+# Build and push Docker images
+print_status "🐳 Building and pushing Docker images..."
 
-# Apply Terraform configuration
-print_status "Applying Terraform configuration..."
-terraform apply -auto-approve -var="project_id=${PROJECT_ID}" -var="region=${REGION}"
+# Build flight agent
+if [ -d "docker/flight-agent" ]; then
+    print_status "Building flight-agent..."
+    cd docker/flight-agent
+    docker build -t "$REGISTRY_URL/flight-agent:latest" .
+    docker push "$REGISTRY_URL/flight-agent:latest"
+    cd ../..
+    print_success "flight-agent image pushed"
+else
+    print_warning "docker/flight-agent directory not found"
+fi
 
-# Get cluster credentials
-print_status "Getting GKE cluster credentials..."
-gcloud container clusters get-credentials "${DEFAULT_CLUSTER_NAME}" \
-    --region="${REGION}" \
-    --project="${PROJECT_ID}"
+# Build coordinator
+if [ -d "docker/coordinator" ]; then
+    print_status "Building coordinator..."
+    cd docker/coordinator
+    docker build -t "$REGISTRY_URL/coordinator:latest" .
+    docker push "$REGISTRY_URL/coordinator:latest"
+    cd ../..
+    print_success "coordinator image pushed"
+else
+    print_warning "docker/coordinator directory not found"
+fi
 
-cd ..
+# Apply ConfigMap (update project ID)
+print_status "📝 Applying ConfigMap..."
+if [ -f "k8s/configmap.yaml" ]; then
+    sed "s/PROJECT_ID/$PROJECT_ID/g" k8s/configmap.yaml | kubectl apply -f -
+    print_success "ConfigMap applied"
+fi
 
-# Create namespace if it doesn't exist
-print_status "Creating Kubernetes namespace..."
-kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+# Apply RBAC (update project ID)
+print_status "🔐 Applying RBAC..."
+if [ -f "k8s/rbac.yaml" ]; then
+    sed "s/PROJECT_ID/$PROJECT_ID/g" k8s/rbac.yaml | kubectl apply -f -
+    print_success "RBAC applied"
+fi
 
-# Create Kubernetes secrets
-print_status "Creating Kubernetes secrets..."
-kubectl create secret generic adk-credentials \
-    --from-file=service-account-key="${KEY_FILE}" \
-    -n "${NAMESPACE}" \
-    --dry-run=client -o yaml | kubectl apply -f -
+# Deploy applications
+print_status "☸️  Deploying applications..."
 
-# Create ConfigMap
-print_status "Creating Kubernetes ConfigMap..."
-kubectl create configmap adk-config \
-    --from-literal=GOOGLE_CLOUD_PROJECT="${PROJECT_ID}" \
-    --from-literal=GOOGLE_CLOUD_LOCATION="${REGION}" \
-    --from-literal=ADK_VERSION="1.0" \
-    -n "${NAMESPACE}" \
-    --dry-run=client -o yaml | kubectl apply -f -
-
-# Build and push Docker images (if Dockerfile exists)
-if [ -d "docker" ]; then
-    print_status "Building and pushing Docker images..."
-    
-    # Create Artifact Registry repository if it doesn't exist
-    REPO_NAME="adk-travel"
-    if ! gcloud artifacts repositories describe "${REPO_NAME}" \
-        --location="${REGION}" \
-        --format="value(name)" &>/dev/null; then
-        
-        print_status "Creating Artifact Registry repository..."
-        gcloud artifacts repositories create "${REPO_NAME}" \
-            --repository-format=docker \
-            --location="${REGION}" \
-            --description="ADK Travel agents Docker images"
-    fi
-    
-    # Configure Docker for Artifact Registry
-    gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
-    
-    # Build and push each service
-    for dockerfile in docker/*/Dockerfile; do
-        if [ -f "$dockerfile" ]; then
-            service_dir=$(dirname "$dockerfile")
-            service_name=$(basename "$service_dir")
-            image_tag="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${service_name}:latest"
-            
-            print_status "Building ${service_name} image..."
-            docker build -t "${image_tag}" "${service_dir}"
-            
-            print_status "Pushing ${service_name} image..."
-            docker push "${image_tag}"
+# Apply all deployments
+if [ -d "k8s/deployments" ]; then
+    for file in k8s/deployments/*.yaml; do
+        if [ -f "$file" ]; then
+            print_status "Applying $(basename "$file")..."
+            sed -e "s/REGION/$REGION/g" -e "s/PROJECT_ID/$PROJECT_ID/g" "$file" | kubectl apply -f -
         fi
     done
-fi
-
-# Apply Kubernetes manifests
-if [ -d "k8s" ]; then
-    print_status "Applying Kubernetes manifests..."
-    
-    # Replace placeholders in manifests
-    find k8s -name "*.yaml" -type f -exec sed -i.bak \
-        -e "s/YOUR_PROJECT_ID/${PROJECT_ID}/g" \
-        -e "s/YOUR_REGION/${REGION}/g" \
-        -e "s/YOUR_NAMESPACE/${NAMESPACE}/g" {} \;
-    
-    # Apply manifests
-    kubectl apply -f k8s/ -n "${NAMESPACE}"
-    
-    # Restore original files
-    find k8s -name "*.yaml.bak" -type f -exec sh -c 'mv "$1" "${1%.bak}"' _ {} \;
+    print_success "All deployments applied"
 else
-    print_warning "No k8s directory found, skipping Kubernetes manifest deployment."
+    print_warning "k8s/deployments directory not found"
 fi
 
 # Wait for deployments to be ready
-print_status "Waiting for deployments to be ready..."
-kubectl wait --for=condition=available --timeout=600s deployment --all -n "${NAMESPACE}"
+print_status "⏳ Waiting for deployments to be ready..."
+kubectl wait --for=condition=available --timeout=300s deployment --all -n "$NAMESPACE" || {
+    print_warning "Some deployments may not be ready yet"
+    kubectl get pods -n "$NAMESPACE"
+}
 
-# Get service information
-print_status "Getting service information..."
-kubectl get services -n "${NAMESPACE}"
+# Get deployment status
+print_status "📊 Deployment Status:"
+echo ""
+kubectl get all -n "$NAMESPACE"
 
-# Check pod status
-print_status "Checking pod status..."
-kubectl get pods -n "${NAMESPACE}" -o wide
+# Get service endpoints
+print_status "🌐 Service Information:"
+kubectl get services -n "$NAMESPACE" -o wide
 
-# Get ingress information (if exists)
-if kubectl get ingress -n "${NAMESPACE}" &>/dev/null; then
-    print_status "Getting ingress information..."
-    kubectl get ingress -n "${NAMESPACE}"
+# Check for LoadBalancer IP
+EXTERNAL_IP=$(kubectl get service travel-coordinator -n "$NAMESPACE" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+
+if [ ! -z "$EXTERNAL_IP" ]; then
+    echo ""
+    print_success "🎉 External IP available: $EXTERNAL_IP"
+    echo ""
+    echo "Test commands:"
+    echo "curl http://$EXTERNAL_IP/health"
+    echo "curl -X POST http://$EXTERNAL_IP/chat -H 'Content-Type: application/json' -d '{\"message\": \"Plan a trip to Tokyo\"}'"
+else
+    echo ""
+    print_status "🔄 LoadBalancer IP not ready yet. Use port-forward for testing:"
+    echo ""
+    echo "kubectl port-forward service/travel-coordinator 8080:80 -n $NAMESPACE"
+    echo "curl http://localhost:8080/health"
+    echo "curl -X POST http://localhost:8080/chat -H 'Content-Type: application/json' -d '{\"message\": \"Plan a trip to Tokyo\"}'"
 fi
 
-# Output useful information
-print_success "Deployment completed successfully!"
-echo ""
-echo "=== Deployment Information ==="
-echo "Project ID: ${PROJECT_ID}"
-echo "Region: ${REGION}"
-echo "Cluster Name: ${DEFAULT_CLUSTER_NAME}"
-echo "Namespace: ${NAMESPACE}"
-echo ""
-echo "=== Useful Commands ==="
-echo "Get pods: kubectl get pods -n ${NAMESPACE}"
-echo "Get services: kubectl get services -n ${NAMESPACE}"
-echo "View logs: kubectl logs -f deployment/<deployment-name> -n ${NAMESPACE}"
-echo "Port forward: kubectl port-forward service/<service-name> 8080:80 -n ${NAMESPACE}"
-echo ""
-echo "=== Testing Commands ==="
-echo "Health check: curl -X GET http://localhost:8080/health"
-echo "Flight agent: curl -X POST http://localhost:8080/agent/flight/chat -H 'Content-Type: application/json' -d '{\"message\": \"I need flights to Tokyo next month\"}'"
-echo "Travel planner: curl -X POST http://localhost:8080/chat -H 'Content-Type: application/json' -d '{\"message\": \"Plan a complete Tokyo trip with flights, hotels, and cultural activities\"}'"
+# Show pod logs if there are issues
+FAILED_PODS=$(kubectl get pods -n "$NAMESPACE" --field-selector=status.phase!=Running --no-headers 2>/dev/null | wc -l)
+if [ "$FAILED_PODS" -gt 0 ]; then
+    print_warning "Some pods are not running:"
+    kubectl get pods -n "$NAMESPACE" --field-selector=status.phase!=Running
+    echo ""
+    print_status "Recent events:"
+    kubectl get events -n "$NAMESPACE" --sort-by='.lastTimestamp' | tail -5
+fi
 
-# Save deployment info to file
-INFO_FILE="deployment-info.txt"
-cat > "${INFO_FILE}" << EOF
-ADK Travel Agents Deployment Information
-========================================
+# Save deployment info
+cat > deployment-status.txt << EOF
+ADK Travel Agents - Deploy Only Status
+=====================================
+Timestamp: $(date)
+Project: $PROJECT_ID
+Region: $REGION
+Cluster: $CLUSTER_NAME
+Namespace: $NAMESPACE
 
-Deployment Date: $(date)
-Project ID: ${PROJECT_ID}
-Region: ${REGION}
-Cluster Name: ${DEFAULT_CLUSTER_NAME}
-Namespace: ${NAMESPACE}
+Images Built and Pushed:
+✅ $REGISTRY_URL/flight-agent:latest
+✅ $REGISTRY_URL/coordinator:latest
 
-Service Account: ${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com
+Quick Test Commands:
+$(if [ ! -z "$EXTERNAL_IP" ]; then
+echo "curl http://$EXTERNAL_IP/health"
+echo "curl -X POST http://$EXTERNAL_IP/chat -H 'Content-Type: application/json' -d '{\"message\": \"Find flights to Tokyo\"}'"
+else
+echo "kubectl port-forward service/travel-coordinator 8080:80 -n $NAMESPACE"
+echo "curl http://localhost:8080/health"
+echo "curl -X POST http://localhost:8080/chat -H 'Content-Type: application/json' -d '{\"message\": \"Find flights to Tokyo\"}'"
+fi)
 
-Useful Commands:
-- Get cluster credentials: gcloud container clusters get-credentials ${DEFAULT_CLUSTER_NAME} --region=${REGION} --project=${PROJECT_ID}
-- View pods: kubectl get pods -n ${NAMESPACE}
-- View services: kubectl get services -n ${NAMESPACE}
-- Port forward: kubectl port-forward service/travel-adk-coordinator 8080:80 -n ${NAMESPACE}
-
-Testing Endpoints (after port-forward):
-- Health: curl http://localhost:8080/health
-- Flight Agent: curl -X POST http://localhost:8080/agent/flight/chat -H 'Content-Type: application/json' -d '{"message": "Find flights to Tokyo"}'
-- Travel Coordinator: curl -X POST http://localhost:8080/chat -H 'Content-Type: application/json' -d '{"message": "Plan a trip to Tokyo"}'
+Management Commands:
+kubectl get pods -n $NAMESPACE
+kubectl logs -f deployment/travel-coordinator -n $NAMESPACE
+kubectl get services -n $NAMESPACE
+kubectl get events -n $NAMESPACE --sort-by='.lastTimestamp'
 EOF
 
-print_success "Deployment information saved to ${INFO_FILE}"
+print_success "✅ Application deployment completed!"
+print_status "📄 Status saved to: deployment-status.txt"
 
-# Cleanup temporary files
-if [ -f "${KEY_FILE}.bak" ]; then
-    rm "${KEY_FILE}.bak"
+# Final verification
+RUNNING_PODS=$(kubectl get pods -n "$NAMESPACE" --field-selector=status.phase=Running --no-headers | wc -l)
+TOTAL_PODS=$(kubectl get pods -n "$NAMESPACE" --no-headers | wc -l)
+
+echo ""
+print_status "Final Status: $RUNNING_PODS/$TOTAL_PODS pods running"
+
+if [ "$RUNNING_PODS" -eq "$TOTAL_PODS" ] && [ "$TOTAL_PODS" -gt 0 ]; then
+    print_success "🎉 All applications deployed successfully!"
+else
+    print_warning "⚠️  Some applications may still be starting up"
+    print_status "Check status with: kubectl get pods -n $NAMESPACE"
 fi
 
-print_success "All done! Your ADK Travel agents are now deployed and running on GKE."
+echo ""
+print_success "🚀 ADK Travel Agents deployment complete!"
