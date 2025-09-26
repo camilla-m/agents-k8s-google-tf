@@ -87,19 +87,44 @@ if ! kubectl get namespace "$NAMESPACE" &>/dev/null; then
     kubectl create namespace "$NAMESPACE"
 fi
 
+# Enable Artifact Registry API if not enabled
+print_status "📡 Enabling required APIs..."
+REQUIRED_APIS=(
+    "artifactregistry.googleapis.com"
+    "container.googleapis.com" 
+    "compute.googleapis.com"
+    "aiplatform.googleapis.com"
+)
+
+for api in "${REQUIRED_APIS[@]}"; do
+    if ! gcloud services list --enabled --filter="name:$api" --format="value(name)" | grep -q "^$api$"; then
+        print_status "Enabling $api..."
+        gcloud services enable "$api" --quiet
+    fi
+done
+print_success "Required APIs enabled"
+
+# Wait for API propagation
+print_status "Waiting for API propagation (30 seconds)..."
+sleep 30
+
 # Create Artifact Registry repository if it doesn't exist
 REGISTRY_URL="$REGION-docker.pkg.dev/$PROJECT_ID/adk-travel"
 print_status "Checking/Creating Artifact Registry..."
 if ! gcloud artifacts repositories describe adk-travel --location="$REGION" &>/dev/null; then
-    print_status "Creating Artifact Registry repository..."
-    gcloud artifacts repositories create adk-travel \
+    print_status "Creating Artifact Registry repository 'adk-travel'..."
+    
+    if gcloud artifacts repositories create adk-travel \
         --repository-format=docker \
         --location="$REGION" \
         --description="ADK Travel agents Docker images" \
-        --quiet
-    print_success "Artifact Registry repository 'adk-travel' created"
+        --quiet; then
+        print_success "✅ Artifact Registry repository 'adk-travel' created successfully"
+    else
+        print_error "❌ Failed to create Artifact Registry repository"
+    fi
 else
-    print_success "Artifact Registry repository 'adk-travel' already exists"
+    print_success "✅ Artifact Registry repository 'adk-travel' already exists"
 fi
 
 # Configure Docker authentication
