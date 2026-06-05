@@ -101,6 +101,7 @@ resource "google_container_cluster" "adk_cluster" {
   location = var.region
   
   initial_node_count       = 1
+  deletion_protection      = false
   
   # Enable Autopilot for simplified management and better resource efficiency
   enable_autopilot = var.enable_autopilot
