@@ -134,6 +134,33 @@ resource "google_container_cluster" "adk_cluster" {
     workload_pool = "${var.project_id}.svc.id.goog"
   }
 
+  # Node configuration for standard cluster (ignored if Autopilot is enabled)
+  dynamic "node_config" {
+    for_each = var.enable_autopilot ? [] : [1]
+    content {
+      machine_type = var.machine_type
+      disk_size_gb = var.disk_size_gb
+      disk_type    = var.disk_type
+      oauth_scopes = var.oauth_scopes
+      
+      metadata = {
+        disable-legacy-endpoints = "true"
+      }
+      
+      workload_metadata_config {
+        mode = "GKE_METADATA"
+      }
+      
+      shielded_instance_config {
+        enable_secure_boot          = var.enable_shielded_nodes
+        enable_integrity_monitoring = var.enable_shielded_nodes
+      }
+      
+      preemptible = var.preemptible
+      labels      = var.resource_labels
+    }
+  }
+
   # Logging and monitoring configuration
   logging_service    = "logging.googleapis.com/kubernetes"
   monitoring_service = "monitoring.googleapis.com/kubernetes"

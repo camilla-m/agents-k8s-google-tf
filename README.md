@@ -22,7 +22,10 @@ git clone <this-repo>
 cd adk-travel-agents
 
 # 2. Quick deployment
+chmod +x ./scripts/setup.sh
 ./scripts/setup.sh your-gcp-project-id
+
+In case of error, try again one more time the script setup.
 
 # 3. Test the agents
 kubectl port-forward service/travel-coordinator 8080:80 -n adk-travel
@@ -180,5 +183,6 @@ Feel free to submit issues and enhancement requests!
 
 **🚀 Ready to deploy AI-powered travel agents on Google Cloud? Start with:**
 ```bash
+chmod +x ./scripts/setup.sh
 ./scripts/setup.sh your-project-id
 ```

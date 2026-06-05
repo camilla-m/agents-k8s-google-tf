@@ -9,6 +9,7 @@ metadata:
     version: "1.0"
   annotations:
     description: "Service account for Google ADK agents with necessary permissions"
+    iam.gke.io/gcp-service-account: "adk-travel-sa@PROJECT_ID.iam.gserviceaccount.com"
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1

@@ -60,8 +60,11 @@ def validate_environment():
     for var, default in recommended_vars.items():
         value = os.getenv(var, default)
         if var == 'GOOGLE_APPLICATION_CREDENTIALS':
-            if not os.path.exists(value):
-                logger.warning(f"{var} file not found at {value} - ADK may not work properly")
+            if value and not os.path.exists(value):
+                logger.warning(f"{var} file not found at {value}. Unsetting to allow GKE Workload Identity fallback.")
+                if var in os.environ:
+                    del os.environ[var]
+                continue
         logger.info(f"{var}: {value}")
     
     return True
