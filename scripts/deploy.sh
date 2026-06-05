@@ -58,14 +58,22 @@ print_status "Project: $PROJECT_ID"
 print_status "Region: $REGION"
 print_status "Cluster: $CLUSTER_NAME"
 
-# Store current directory and move to parent directory
+# Store current directory and determine project root
 SCRIPT_DIR="$(pwd)"
-print_status "📍 Current directory: $SCRIPT_DIR"
+print_status "📍 Execution directory: $SCRIPT_DIR"
 
-# Go up one directory to find project files
-cd ..
-PROJECT_ROOT="$(pwd)"
-print_status "📁 Moving to project root: $PROJECT_ROOT"
+SCRIPT_REAL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+
+if [ -f "Dockerfile" ] && [ -d "src" ] && [ -d "k8s" ]; then
+    PROJECT_ROOT="$(pwd)"
+elif [ -f "../Dockerfile" ] && [ -d "../src" ] && [ -d "../k8s" ]; then
+    cd ..
+    PROJECT_ROOT="$(pwd)"
+else
+    cd "$SCRIPT_REAL_DIR/.."
+    PROJECT_ROOT="$(pwd)"
+fi
+print_status "📁 Using project root: $PROJECT_ROOT"
 
 # Check project structure
 print_status "🔍 Checking project structure..."
