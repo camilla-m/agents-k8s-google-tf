@@ -163,6 +163,14 @@ done
 
 print_success "IAM roles assigned successfully"
 
+# Grant Artifact Registry Reader to default Compute Engine service account for GKE node access
+print_success "Granting Artifact Registry access to GKE nodes..."
+PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format="value(projectNumber)")
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+    --role="roles/artifactregistry.reader" \
+    --quiet
+
 # Create service account key
 print_header "Creating Service Account Key"
 KEY_FILE="$PROJECT_ROOT/adk-service-account-key.json"

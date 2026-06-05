@@ -1,25 +1,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: adk-travel-app
+  name: travel-adk-coordinator
   namespace: adk-travel
   labels:
-    app: adk-travel
+    app: travel-adk-coordinator
     tier: application
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: adk-travel
+      app: travel-adk-coordinator
   template:
     metadata:
       labels:
-        app: adk-travel
+        app: travel-adk-coordinator
         tier: application
     spec:
       serviceAccountName: adk-agents
       containers:
-      - name: adk-travel
+      - name: travel-adk-coordinator
         # Imagem única construída do root Dockerfile com código de src/
         image: IMAGE_URL
         ports:
@@ -83,13 +83,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: adk-travel-service
+  name: travel-adk-coordinator
   namespace: adk-travel
   labels:
-    app: adk-travel
+    app: travel-adk-coordinator
 spec:
   selector:
-    app: adk-travel
+    app: travel-adk-coordinator
   ports:
   - port: 80
     targetPort: 8080
