@@ -11,8 +11,8 @@ metadata:
     description: "Configuration for Google ADK Travel System - Service Account Only"
 data:
   # Google Cloud Configuration (ONLY REQUIRED CONFIG)
-  GOOGLE_CLOUD_PROJECT: "YOUR_PROJECT_ID"  # This will be replaced by deploy script
-  GOOGLE_CLOUD_LOCATION: "us-central1"
+  GOOGLE_CLOUD_PROJECT: "PROJECT_ID"  # This will be replaced by deploy script
+  GOOGLE_CLOUD_LOCATION: "REGION"
   
   # ADK Configuration
   ADK_VERSION: "1.0"
