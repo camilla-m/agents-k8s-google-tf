@@ -16,20 +16,32 @@ Based on the [camilla-m/agents-k8s-google-tf](https://github.com/camilla-m/agent
 
 ## 🚀 Quick Start
 
+Follow these steps to deploy the system automatically:
+
+### 1. Clone the repository and enter the directory
 ```bash
-# 1. Clone and setup
-git clone <this-repo>
-cd adk-travel-agents
+git clone https://github.com/camilla-m/agents-k8s-google-tf.git
+cd agents-k8s-google-tf
+```
 
-# 2. Quick deployment
+### 2. Run the automated deployment script
+This script initializes Terraform, provisions the GKE cluster, creates the service account, configures Workload Identity bindings, builds the Docker image, and deploys the coordinator application.
+```bash
 chmod +x ./scripts/setup.sh
-./scripts/setup.sh your-gcp-project-id
+./scripts/setup.sh YOUR_GCP_PROJECT_ID
+```
+*(Note: If the setup encounters any transient API enablement errors, rerun the script to resume)*
 
-In case of error, try again one more time the script setup.
-
-# 3. Test the agents
-kubectl port-forward service/travel-coordinator 8080:80 -n adk-travel
-curl -X POST http://localhost:8080/chat -H "Content-Type: application/json" -d '{"message": "Plan a trip to Tokyo"}'
+### 3. Test the agents
+Start port-forwarding to the coordinator service:
+```bash
+kubectl port-forward service/travel-adk-coordinator 8080:80 -n adk-travel
+```
+Then, in another terminal window, send a chat request to plan a trip:
+```bash
+curl -X POST http://localhost:8080/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Plan a trip to Tokyo"}'
 ```
 
 ## 🧪 Testing the Agents
@@ -148,12 +160,11 @@ kubectl top pods -n adk-travel
 ## 📈 Scaling
 
 ```bash
-# Scale agents
-kubectl scale deployment flight-agent --replicas=5 -n adk-travel
-kubectl scale deployment travel-coordinator --replicas=3 -n adk-travel
+# Scale the Travel Coordinator (which runs all agents)
+kubectl scale deployment travel-adk-coordinator --replicas=3 -n adk-travel
 
-# Monitor scaling
-kubectl get hpa -n adk-travel -w
+# Monitor pods
+kubectl get pods -n adk-travel
 ```
 
 ## 🎯 Demo Script
@@ -165,14 +176,14 @@ Perfect for presentations and demos:
 kubectl get all -n adk-travel
 
 # 2. Port forward for demo
-kubectl port-forward service/travel-coordinator 8080:80 -n adk-travel &
+kubectl port-forward service/travel-adk-coordinator 8080:80 -n adk-travel &
 
 # 3. Demo the AI agents
 curl -X POST http://localhost:8080/chat -H "Content-Type: application/json" \
   -d '{"message": "Plan a 3-day cultural trip to Tokyo with a $2000 budget"}'
 
 # 4. Show real-time logs
-kubectl logs -f deployment/travel-coordinator -n adk-travel --tail=10
+kubectl logs -f deployment/travel-adk-coordinator -n adk-travel --tail=10
 ```
 
 ## 🤝 Contributing

@@ -163,6 +163,13 @@ done
 
 print_success "IAM roles assigned successfully"
 
+# Grant Workload Identity role to the GKE service account
+print_success "Granting Workload Identity impersonation role..."
+gcloud iam service-accounts add-iam-policy-binding "$SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com" \
+    --role="roles/iam.workloadIdentityUser" \
+    --member="serviceAccount:$PROJECT_ID.svc.id.goog[adk-travel/adk-agents]" \
+    --quiet
+
 # Grant Artifact Registry Reader to default Compute Engine service account for GKE node access
 print_success "Granting Artifact Registry access to GKE nodes..."
 PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format="value(projectNumber)")
@@ -171,18 +178,8 @@ gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --role="roles/artifactregistry.reader" \
     --quiet
 
-# Create service account key
-print_header "Creating Service Account Key"
-KEY_FILE="$PROJECT_ROOT/adk-service-account-key.json"
+# Using secure Workload Identity - no JSON service account key files required on disk
 
-if [ ! -f "$KEY_FILE" ]; then
-    print_success "Creating service account key..."
-    gcloud iam service-accounts keys create $KEY_FILE \
-        --iam-account="$SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com"
-    print_success "Service account key created: $KEY_FILE"
-else
-    print_warning "Service account key already exists: $KEY_FILE"
-fi
 
 # Deploy infrastructure with Terraform
 print_header "Deploying Infrastructure with Terraform"
@@ -277,17 +274,8 @@ kubectl create configmap adk-config \
     -n adk-travel \
     --dry-run=client -o yaml | kubectl apply -f -
 
-print_success "Creating secrets..."
-kubectl create secret generic adk-credentials \
-    --from-file=service-account-key=$KEY_FILE \
-    -n adk-travel \
-    --dry-run=client -o yaml | kubectl apply -f -
+# No secrets required for GSA key files under Workload Identity
 
-# Create empty API keys secret to prevent deployment errors
-kubectl create secret generic adk-api-keys \
-    --from-literal=placeholder="service-account-only" \
-    -n adk-travel \
-    --dry-run=client -o yaml | kubectl apply -f -
 
 print_success "Kubernetes configuration complete"
 
@@ -406,9 +394,7 @@ Project ID: $PROJECT_ID
 Region: $REGION
 Cluster Name: $CLUSTER_NAME
 Service Account: $SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com
-
-Key Files:
-- Service Account Key: $KEY_FILE
+Configuration Files:
 - Terraform Configuration: terraform/terraform.tfvars
 - Configuration File: $CONFIG_FILE
 
