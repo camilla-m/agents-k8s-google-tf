@@ -65,13 +65,11 @@ class HotelADKAgent(ADKBaseAgent):
                                 },
                                 "guests": {
                                     "type": "integer",
-                                    "description": "Number of guests",
-                                    "default": 2
+                                    "description": "Number of guests"
                                 },
                                 "rooms": {
                                     "type": "integer", 
-                                    "description": "Number of rooms needed",
-                                    "default": 1
+                                    "description": "Number of rooms needed"
                                 },
                                 "budget_max": {
                                     "type": "number",
@@ -132,13 +130,11 @@ class HotelADKAgent(ADKBaseAgent):
                                 },
                                 "rooms": {
                                     "type": "integer",
-                                    "description": "Number of rooms",
-                                    "default": 1
+                                    "description": "Number of rooms"
                                 },
                                 "guests": {
                                     "type": "integer",
-                                    "description": "Number of guests",
-                                    "default": 2
+                                    "description": "Number of guests"
                                 }
                             },
                             "required": ["hotel_id", "check_in", "check_out"]

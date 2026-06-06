@@ -54,8 +54,7 @@ class ActivityADKAgent(ADKBaseAgent):
                                 },
                                 "budget_level": {
                                     "type": "string",
-                                    "description": "Budget level: budget, mid-range, luxury",
-                                    "default": "mid-range"
+                                    "description": "Budget level: budget, mid-range, luxury"
                                 },
                                 "duration": {
                                     "type": "string",
@@ -63,8 +62,7 @@ class ActivityADKAgent(ADKBaseAgent):
                                 },
                                 "group_size": {
                                     "type": "integer",
-                                    "description": "Number of people",
-                                    "default": 2
+                                    "description": "Number of people"
                                 }
                             },
                             "required": ["destination"]
@@ -246,6 +244,7 @@ class ActivityADKAgent(ADKBaseAgent):
             }
             if duration in duration_mapping:
                 filtered_activities = [
+                    activity for activity in filtered_activities
                     if activity["duration"] in duration_mapping[duration]
                 ]
         

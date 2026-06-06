@@ -60,13 +60,11 @@ class FlightADKAgent(ADKBaseAgent):
                                 },
                                 "passengers": {
                                     "type": "integer",
-                                    "description": "Number of passengers",
-                                    "default": 1
+                                    "description": "Number of passengers"
                                 },
                                 "class": {
                                     "type": "string",
-                                    "description": "Travel class: economy, business, first",
-                                    "default": "economy"
+                                    "description": "Travel class: economy, business, first"
                                 }
                             },
                             "required": ["origin", "destination", "departure_date"]

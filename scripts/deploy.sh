@@ -235,7 +235,7 @@ for file in k8s/*.yaml k8s/*.yml; do
         # Replace placeholders and apply
         sed -e "s|PROJECT_ID|$PROJECT_ID|g" \
             -e "s|REGION|$REGION|g" \
-            -e "s|IMAGE_URL|$IMAGE_LATEST|g" \
+            -e "s|IMAGE_URL|$IMAGE_TAG|g" \
             -e "s|REGISTRY_URL|$REGISTRY_URL|g" \
             -e "s|NAMESPACE|$NAMESPACE|g" \
             "$file" | kubectl apply -f -
