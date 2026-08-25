@@ -1,38 +1,10 @@
-# Versão corrigida e testada - ADK Travel Agents
-# Use estas versões específicas que funcionam juntas
+# ADK Travel Agents - versões testadas juntas (ver README/git log: migração de uma
+# implementação hand-rolled em cima do vertexai SDK + Flask para o google-adk real)
 
-# Framework web
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
+# Google Agent Development Kit - traz FastAPI, uvicorn, pydantic e google-genai como
+# dependências transitivas; não pinamos essas aqui para deixar o pip resolver
+# versões compatíveis entre si (testado com fastapi 0.141.1, uvicorn 0.52.4,
+# pydantic 2.13.4, google-genai 2.20.0, google-auth 2.57.0).
+google-adk==2.7.1
 
-# Google Cloud - versões compatíveis TESTADAS
-google-cloud-aiplatform==1.52.0
-google-cloud-secret-manager==2.20.0
-google-auth==2.23.4
-google-auth-oauthlib==1.1.0
-google-api-core==2.14.0
-google-cloud-core==2.3.3
-google-cloud-storage==2.10.0
-google-cloud-logging==3.8.0
-
-# Cliente HTTP
-requests==2.31.0
-httpx==0.25.2
-
-# Validação de dados
-pydantic==2.5.0
-
-# Utilitários
-aiohttp==3.9.1
-aiofiles==23.2.1
-tenacity==8.2.3
-
-# Opcional: Para desenvolvimento
-pytest==7.4.3
-pytest-asyncio==0.21.1
-
-prometheus_client==0.17.1
-
-flask==2.3.3
-gunicorn==21.2.0
-kubernetes==28.1.0
+prometheus_client==0.26.0

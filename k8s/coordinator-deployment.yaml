@@ -65,10 +65,16 @@ spec:
           periodSeconds: 5
           timeoutSeconds: 3
           failureThreshold: 2
-        # Security context
+        # Security context. runAsUser must match the adk-user uid created in the
+        # Dockerfile (1000) - runAsGroup is set explicitly too because leaving it out
+        # made the container run with gid=0 (root) instead of adk-user's group, which
+        # (combined with the uid mismatch this fixes) is why the /dev-ui runtime
+        # config write used to fail with Permission Denied despite /app being chowned
+        # to adk-user.
         securityContext:
           runAsNonRoot: true
           runAsUser: 1000
+          runAsGroup: 1000
           readOnlyRootFilesystem: false
           allowPrivilegeEscalation: false
           capabilities:

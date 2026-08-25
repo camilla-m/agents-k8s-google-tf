@@ -10,24 +10,20 @@ metadata:
   annotations:
     description: "Configuration for Google ADK Travel System - Service Account Only"
 data:
-  # Only variables the app actually reads (verified against src/ and main.py). This
-  # used to also list ~20 more keys - ADK_VERSION, FLASK_ENV, CONVERSATION_TIMEOUT,
-  # MAX_CONVERSATION_TURNS, CONVERSATION_CLEANUP_INTERVAL, THREAD_POOL_MAX_WORKERS,
-  # REQUEST_TIMEOUT, AGENT_QUERY_TIMEOUT, PLANNING_QUERY_TIMEOUT, METRICS_ENABLED,
-  # HEALTH_CHECK_INTERVAL, CORS_ENABLED, RATE_LIMITING_ENABLED, USE_MOCK_DATA,
-  # MOCK_FLIGHT_DATA, MOCK_HOTEL_DATA, MOCK_ACTIVITY_DATA, GEMINI_TEMPERATURE,
-  # GEMINI_MAX_OUTPUT_TOKENS, USE_SERVICE_ACCOUNT_ONLY - none of which any code path
-  # ever calls os.getenv() for. Removed rather than left as unused config that looks
-  # load-bearing but isn't. If you wire one of these up in code, add it back here.
+  # Only variables the app actually reads (verified with grep against agents/ and
+  # main.py). Keep it that way - see git history for what happens when config drifts
+  # from what the code reads (dead keys that look load-bearing but aren't, or three
+  # competing definitions of the same ConfigMap).
   GOOGLE_CLOUD_PROJECT: "PROJECT_ID"  # This will be replaced by deploy script
   GOOGLE_CLOUD_LOCATION: "REGION"
   LOG_LEVEL: "INFO"
-  DEBUG: "false"
-  HOST: "0.0.0.0"
   PORT: "8080"
-  METRICS_PORT: "8090"
 
-  # Gemini model (via Workload Identity, no API key). gemini-1.5-pro/gemini-pro are
-  # retired on Vertex AI - keep this in sync with whatever Gemini model family is
-  # currently supported for your project/region.
+  # Use Vertex AI (Workload Identity / ADC), not the Gemini Developer API - which
+  # would need GOOGLE_API_KEY, which we deliberately don't set.
+  GOOGLE_GENAI_USE_VERTEXAI: "TRUE"
+
+  # Gemini model. gemini-1.5-pro/gemini-pro are retired on Vertex AI - keep this in
+  # sync with whatever Gemini model family is currently supported for your
+  # project/region.
   GEMINI_MODEL: "gemini-2.5-flash"

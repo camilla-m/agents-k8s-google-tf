@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ADK Travel Agents - Deploy Script (Modified to go up one directory)
-# Adapted for: Dockerfile in parent directory, src/ folder, k8s/ manifests
+# Adapted for: Dockerfile in parent directory, agents/ folder, k8s/ manifests
 # Usage: ./scripts/deploy-current-structure.sh PROJECT_ID [REGION] [CLUSTER_NAME]
 
 set -e
@@ -42,7 +42,7 @@ if [ $# -lt 1 ] || [ $# -gt 3 ]; then
     echo ""
     echo "Project structure expected (one level up from scripts/):"
     echo "  ├── Dockerfile          # Main Dockerfile in root"
-    echo "  ├── src/               # Application source code"
+    echo "  ├── agents/            # ADK agent definitions (root_agent, tools)"
     echo "  ├── k8s/               # Kubernetes manifests"
     echo "  └── scripts/           # This script location"
     echo ""
@@ -64,9 +64,9 @@ print_status "📍 Execution directory: $SCRIPT_DIR"
 
 SCRIPT_REAL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 
-if [ -f "Dockerfile" ] && [ -d "src" ] && [ -d "k8s" ]; then
+if [ -f "Dockerfile" ] && [ -d "agents" ] && [ -d "k8s" ]; then
     PROJECT_ROOT="$(pwd)"
-elif [ -f "../Dockerfile" ] && [ -d "../src" ] && [ -d "../k8s" ]; then
+elif [ -f "../Dockerfile" ] && [ -d "../agents" ] && [ -d "../k8s" ]; then
     cd ..
     PROJECT_ROOT="$(pwd)"
 else
@@ -97,12 +97,12 @@ else
     print_status "✅ Found Dockerfile"
 fi
 
-if [ ! -d "src" ]; then
-    print_status "src/ directory not found, searching..."
-    find . -maxdepth 2 -type d -name "*src*" | head -3
-    MISSING_ITEMS+=("src/ directory")
+if [ ! -d "agents" ]; then
+    print_status "agents/ directory not found, searching..."
+    find . -maxdepth 2 -type d -name "*agents*" | head -3
+    MISSING_ITEMS+=("agents/ directory")
 else
-    print_status "✅ Found src/ directory"
+    print_status "✅ Found agents/ directory"
 fi
 
 if [ ! -d "k8s" ]; then
@@ -390,7 +390,7 @@ Structure Used:
 ✅ Script executed from scripts/ directory
 ✅ Files found in parent directory: $PROJECT_ROOT
 ✅ Dockerfile in project root
-✅ Source code in src/
+✅ Source code in agents/
 ✅ Kubernetes manifests in k8s/
 EOF
 

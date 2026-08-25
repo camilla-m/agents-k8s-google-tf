@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<title>ADK Travel Agents - Test Console</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0f1420;
+    --panel: #161d2e;
+    --panel-2: #1d263b;
+    --border: #2a3550;
+    --text: #e6e9f2;
+    --text-dim: #97a1bd;
+    --accent: #6ea8fe;
+    --ok: #4ade80;
+    --err: #f87171;
+    --user-bubble: #2d3a5c;
+    --agent-bubble: #1d263b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  header h1 {
+    font-size: 16px;
+    margin: 0;
+    white-space: nowrap;
+  }
+  header h1 span { color: var(--text-dim); font-weight: 400; }
+  .url-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 260px;
+  }
+  .url-row input {
+    flex: 1;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  .status-dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--text-dim);
+    flex-shrink: 0;
+  }
+  .status-dot.ok { background: var(--ok); }
+  .status-dot.err { background: var(--err); }
+  main {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+  }
+  nav {
+    width: 190px;
+    border-right: 1px solid var(--border);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow-y: auto;
+  }
+  nav button {
+    text-align: left;
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    padding: 9px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13.5px;
+  }
+  nav button:hover { background: var(--panel-2); color: var(--text); }
+  nav button.active { background: var(--panel-2); color: var(--accent); font-weight: 600; }
+  section.view { flex: 1; display: none; flex-direction: column; min-height: 0; }
+  section.view.active { display: flex; }
+  .chat-log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .msg { max-width: 75%; }
+  .msg.user { align-self: flex-end; }
+  .msg.agent { align-self: flex-start; }
+  .msg .bubble {
+    padding: 10px 14px;
+    border-radius: 12px;
+    white-space: pre-wrap;
+    line-height: 1.45;
+    font-size: 14px;
+  }
+  .msg.user .bubble { background: var(--user-bubble); border-bottom-right-radius: 3px; }
+  .msg.agent .bubble { background: var(--agent-bubble); border: 1px solid var(--border); border-bottom-left-radius: 3px; }
+  .msg .who { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; }
+  .msg .tools {
+    margin-top: 6px;
+    font-size: 11.5px;
+    color: var(--accent);
+    cursor: pointer;
+  }
+  .msg .tools-detail {
+    display: none;
+    margin-top: 6px;
+    font-size: 11.5px;
+    background: #0d1220;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px;
+    color: var(--text-dim);
+    overflow-x: auto;
+  }
+  .msg .tools-detail.open { display: block; }
+  .msg.error .bubble { background: #3a1f24; border: 1px solid #6b2b33; color: #ffb4b4; }
+  .composer {
+    border-top: 1px solid var(--border);
+    padding: 14px 20px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+  .composer textarea {
+    flex: 1;
+    resize: none;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    min-height: 22px;
+    max-height: 140px;
+  }
+  .composer button {
+    background: var(--accent);
+    color: #0b1220;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 18px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .composer button:disabled { opacity: .5; cursor: default; }
+  .hint { padding: 6px 20px 0; font-size: 11.5px; color: var(--text-dim); }
+  .plan-form {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 480px;
+    overflow-y: auto;
+  }
+  .plan-form label { font-size: 12.5px; color: var(--text-dim); display: block; margin-bottom: 4px; }
+  .plan-form input, .plan-form select {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 13.5px;
+  }
+  .plan-form button {
+    background: var(--accent);
+    color: #0b1220;
+    border: none;
+    border-radius: 10px;
+    padding: 11px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .plan-result {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    border-left: 1px solid var(--border);
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+  .plan-result h3 { color: var(--accent); font-size: 13px; margin: 16px 0 6px; }
+  .plan-result pre {
+    white-space: pre-wrap;
+    background: #0d1220;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  #plan-view.active { flex-direction: row; }
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    display: inline-block;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .empty { color: var(--text-dim); font-size: 13px; padding: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🧭 ADK Travel Agents <span>test console</span></h1>
+  <div class="url-row">
+    <span class="status-dot" id="status-dot"></span>
+    <input id="base-url" placeholder="http://LOAD_BALANCER_IP" />
+    <button onclick="checkHealth()" style="background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12.5px;">Testar conexão</button>
+  </div>
+</header>
+
+<main>
+  <nav>
+    <button class="nav-btn active" data-view="coord-view">🧭 Coordenador (multi-agente)</button>
+    <button class="nav-btn" data-view="flight-view">✈️ Voos</button>
+    <button class="nav-btn" data-view="hotel-view">🏨 Hotéis</button>
+    <button class="nav-btn" data-view="activity-view">🎟️ Atividades</button>
+    <button class="nav-btn" data-view="plan-view">📋 Plano completo</button>
+  </nav>
+
+  <section class="view active" id="coord-view" data-endpoint="/chat" data-conv="coord">
+    <div class="chat-log" data-log></div>
+    <div class="hint">Fala com o coordenador — ele decide quais agentes acionar (voo/hotel/atividade) pra cada mensagem.</div>
+    <div class="composer">
+      <textarea rows="1" placeholder="Plan a 4-day trip to Tokyo with a $3000 budget..." data-input></textarea>
+      <button data-send>Enviar</button>
+    </div>
+  </section>
+
+  <section class="view" id="flight-view" data-endpoint="/agent/flight/chat" data-conv="flight">
+    <div class="chat-log" data-log></div>
+    <div class="hint">Fala direto com o agente de voos.</div>
+    <div class="composer">
+      <textarea rows="1" placeholder="Find flights from SFO to Tokyo, business class, 2026-09-15" data-input></textarea>
+      <button data-send>Enviar</button>
+    </div>
+  </section>
+
+  <section class="view" id="hotel-view" data-endpoint="/agent/hotel/chat" data-conv="hotel">
+    <div class="chat-log" data-log></div>
+    <div class="hint">Fala direto com o agente de hotéis.</div>
+    <div class="composer">
+      <textarea rows="1" placeholder="Luxury hotels in Shinjuku with pool and spa, checkin 2026-10-01, checkout 2026-10-05" data-input></textarea>
+      <button data-send>Enviar</button>
+    </div>
+  </section>
+
+  <section class="view" id="activity-view" data-endpoint="/agent/activity/chat" data-conv="activity">
+    <div class="chat-log" data-log></div>
+    <div class="hint">Fala direto com o agente de atividades.</div>
+    <div class="composer">
+      <textarea rows="1" placeholder="Cultural and food activities in Tokyo, mid-range budget" data-input></textarea>
+      <button data-send>Enviar</button>
+    </div>
+  </section>
+
+  <section class="view" id="plan-view">
+    <div class="plan-form">
+      <div>
+        <label>Destino</label>
+        <input id="plan-destination" value="Tokyo" />
+      </div>
+      <div>
+        <label>Dias</label>
+        <input id="plan-days" type="number" value="4" min="1" max="30" />
+      </div>
+      <div>
+        <label>Orçamento (USD)</label>
+        <input id="plan-budget" type="number" value="3000" min="100" />
+      </div>
+      <div>
+        <label>Estilo de viagem</label>
+        <select id="plan-style">
+          <option value="balanced">balanced</option>
+          <option value="budget">budget</option>
+          <option value="mid-range">mid-range</option>
+          <option value="luxury">luxury</option>
+          <option value="business">business</option>
+          <option value="adventure">adventure</option>
+        </select>
+      </div>
+      <div>
+        <label>Interesses (separados por vírgula)</label>
+        <input id="plan-interests" value="cultural, food" />
+      </div>
+      <button id="plan-submit" onclick="submitPlan()">Gerar plano completo</button>
+    </div>
+    <div class="plan-result" id="plan-result">
+      <div class="empty">O resultado do /plan aparece aqui.</div>
+    </div>
+  </section>
+</main>
+
+<script>
+const DEFAULT_URL = "http://35.202.189.24"; // troque pelo IP do seu LoadBalancer (kubectl get svc -n adk-travel)
+const urlInput = document.getElementById('base-url');
+urlInput.value = localStorage.getItem('adk_base_url') || DEFAULT_URL;
+urlInput.addEventListener('change', () => localStorage.setItem('adk_base_url', urlInput.value));
+
+function baseUrl() { return urlInput.value.replace(/\/+$/, ''); }
+
+async function checkHealth() {
+  const dot = document.getElementById('status-dot');
+  dot.className = 'status-dot';
+  try {
+    const r = await fetch(baseUrl() + '/health', { method: 'GET' });
+    const d = await r.json();
+    dot.className = 'status-dot ' + (d.status === 'healthy' ? 'ok' : 'err');
+  } catch (e) {
+    dot.className = 'status-dot err';
+  }
+}
+checkHealth();
+
+// --- Nav ---
+document.querySelectorAll('.nav-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.view).classList.add('active');
+  });
+});
+
+// --- Chat views (coordinator + 3 agents) ---
+const conversationIds = {};
+
+function addMessage(logEl, role, text, extra) {
+  const msg = document.createElement('div');
+  msg.className = 'msg ' + role;
+  const who = document.createElement('div');
+  who.className = 'who';
+  who.textContent = role === 'user' ? 'você' : (extra && extra.who) || 'agente';
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = text;
+  msg.appendChild(who);
+  msg.appendChild(bubble);
+
+  if (extra && extra.toolCalls && extra.toolCalls.length) {
+    const toggle = document.createElement('div');
+    toggle.className = 'tools';
+    toggle.textContent = `🔧 ${extra.toolCalls.length} tool call(s) — clique pra ver`;
+    const detail = document.createElement('pre');
+    detail.className = 'tools-detail';
+    detail.textContent = JSON.stringify(extra.toolCalls, null, 2);
+    toggle.onclick = () => detail.classList.toggle('open');
+    msg.appendChild(toggle);
+    msg.appendChild(detail);
+  }
+  logEl.appendChild(msg);
+  logEl.scrollTop = logEl.scrollHeight;
+  return msg;
+}
+
+document.querySelectorAll('.view[data-endpoint]').forEach(view => {
+  const log = view.querySelector('[data-log]');
+  const input = view.querySelector('[data-input]');
+  const sendBtn = view.querySelector('[data-send]');
+  const endpoint = view.dataset.endpoint;
+  const convKey = view.dataset.conv;
+
+  async function send() {
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    sendBtn.disabled = true;
+    addMessage(log, 'user', text);
+    const loading = addMessage(log, 'agent', '…', { who: 'pensando' });
+
+    try {
+      const body = { message: text };
+      if (conversationIds[convKey]) body.conversation_id = conversationIds[convKey];
+
+      const r = await fetch(baseUrl() + endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await r.json();
+      loading.remove();
+
+      if (!r.ok || data.error) {
+        addMessage(log, 'agent error', data.error || `HTTP ${r.status}`, { who: 'erro' });
+        return;
+      }
+
+      if (data.conversation_id) conversationIds[convKey] = data.conversation_id;
+
+      if (data.multi_agent_response) {
+        // Coordinator fan-out: show each agent's answer as its own bubble
+        const responses = data.agent_responses || {};
+        for (const [agentName, resp] of Object.entries(responses)) {
+          if (resp && resp.response) {
+            addMessage(log, 'agent', resp.response, { who: agentName, toolCalls: resp.function_calls });
+          } else if (resp && resp.error) {
+            addMessage(log, 'agent error', resp.error, { who: agentName + ' (erro)' });
+          }
+        }
+        if (data.summary) {
+          addMessage(log, 'agent', data.summary, { who: 'resumo do coordenador' });
+        }
+      } else {
+        addMessage(log, 'agent', data.response || '(sem resposta em texto)', {
+          who: data.agent || 'agente',
+          toolCalls: data.function_calls
+        });
+      }
+    } catch (e) {
+      loading.remove();
+      addMessage(log, 'agent error', 'Falha de conexão: ' + e.message + ' (CORS? URL certa? cluster de pé?)', { who: 'erro' });
+    } finally {
+      sendBtn.disabled = false;
+      input.focus();
+    }
+  }
+
+  sendBtn.addEventListener('click', send);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  });
+});
+
+// --- Plan view ---
+async function submitPlan() {
+  const btn = document.getElementById('plan-submit');
+  const result = document.getElementById('plan-result');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Gerando (pode levar até 1 min)...';
+  result.innerHTML = '<div class="empty">Aguardando resposta dos 3 agentes...</div>';
+
+  const payload = {
+    destination: document.getElementById('plan-destination').value,
+    days: Number(document.getElementById('plan-days').value),
+    budget: Number(document.getElementById('plan-budget').value),
+    travel_style: document.getElementById('plan-style').value,
+    interests: document.getElementById('plan-interests').value.split(',').map(s => s.trim()).filter(Boolean)
+  };
+
+  try {
+    const r = await fetch(baseUrl() + '/plan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await r.json();
+    if (!r.ok || data.error) {
+      result.innerHTML = `<div class="empty" style="color:var(--err)">Erro: ${data.error || r.status}</div>`;
+      return;
+    }
+    let html = `<h3>Resumo</h3><div>${(data.coordinator_summary || '').replace(/</g, '&lt;')}</div>`;
+    html += `<h3>Qualidade do plano</h3><pre>${JSON.stringify(data.plan_quality, null, 2)}</pre>`;
+    html += `<h3>Recomendações por agente</h3>`;
+    for (const [agent, rec] of Object.entries(data.agent_recommendations || {})) {
+      html += `<h3 style="color:var(--text)">${agent}</h3><div>${((rec.response) || rec.error || '').replace(/</g, '&lt;')}</div>`;
+    }
+    html += `<h3>Próximos passos</h3><pre>${(data.next_steps || []).join('\n')}</pre>`;
+    result.innerHTML = html;
+  } catch (e) {
+    result.innerHTML = `<div class="empty" style="color:var(--err)">Falha de conexão: ${e.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Gerar plano completo';
+  }
+}
+</script>
+</body>
+</html>

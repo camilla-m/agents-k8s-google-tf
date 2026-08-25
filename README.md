@@ -1,8 +1,9 @@
 # 🚀 ADK Travel Agents
 
 A simple, scalable AI-powered travel assistant system built with:
-- **Google AI Platform (ADK)** for intelligent responses
-- **Google Kubernetes Engine (GKE)** for container orchestration  
+- **[Google Agent Development Kit](https://google.github.io/adk-docs/) (`google-adk`)** for the agents themselves - three specialist agents (flight/hotel/activity) plus a coordinator that calls them as tools, served with the framework's own dev UI (`/dev-ui`) and REST API
+- **Vertex AI / Gemini** as the underlying model, via GKE Workload Identity (no API keys)
+- **Google Kubernetes Engine (GKE)** for container orchestration
 - **Terraform** for infrastructure as code
 
 Based on the [camilla-m/agents-k8s-google-tf](https://github.com/camilla-m/agents-k8s-google-tf) repository, simplified for easy deployment and demo purposes.
@@ -37,12 +38,23 @@ Start port-forwarding to the coordinator service:
 ```bash
 kubectl port-forward service/travel-adk-coordinator 8080:80 -n adk-travel
 ```
-Then, in another terminal window, send a chat request to plan a trip:
+
+Open the **ADK dev console** in your browser - google-adk's own UI for chatting with
+the agents and watching tool calls / sub-agent delegation happen live:
+```
+http://localhost:8080/dev-ui/
+```
+
+Or send a chat request from the terminal instead:
 ```bash
 curl -X POST http://localhost:8080/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "Plan a trip to Tokyo"}'
 ```
+
+There's also a small standalone test page at [ui/index.html](ui/index.html) - open it
+directly in a browser (no server needed) and point it at your LoadBalancer IP or
+`http://localhost:8080` if you're port-forwarding.
 
 ## 🧪 Testing the Agents
 
