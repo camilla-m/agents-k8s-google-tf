@@ -4,3 +4,8 @@
 *.tfstate.backup
 .terraformrc
 terraform.rc
+terraform/terraform.tfvars
+terraform/terraform.tfvars.bak
+terraform/tfplan
+deployment-config.txt
+deployment-info.txt

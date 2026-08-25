@@ -120,6 +120,42 @@ class ADKBaseAgent(ABC):
         """Get system instruction for this agent - must be implemented by subclasses"""
         pass
     
+    @staticmethod
+    def _extract_response_text(response) -> str:
+        """Safely read text from a Gemini response.
+
+        response.text raises when the candidate has no text part at all - which is the
+        normal shape of a response that is *only* a function call (no leading text).
+        Callers should treat "" as "no text yet, a function call is likely pending".
+        """
+        try:
+            return response.text
+        except Exception:
+            return ""
+
+    @classmethod
+    def _jsonable(cls, value):
+        """Recursively convert Vertex AI proto-plus containers (MapComposite,
+        RepeatedComposite, ...) into plain dict/list/scalar values so the result can
+        safely go through json.dumps/jsonify.
+        """
+        if isinstance(value, dict):
+            return {k: cls._jsonable(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [cls._jsonable(v) for v in value]
+        if value is None or isinstance(value, (str, bytes, int, float, bool)):
+            return value
+        # MapComposite/RepeatedComposite (and anything similarly proto-plus-shaped):
+        # duck-type our way to a plain mapping or list before giving up.
+        try:
+            return {k: cls._jsonable(v) for k, v in dict(value).items()}
+        except (TypeError, ValueError):
+            pass
+        try:
+            return [cls._jsonable(v) for v in value]
+        except TypeError:
+            return value
+
     def start_conversation(self, user_message: str, conversation_id: str = None) -> Dict[str, Any]:
         """Start a new conversation with the ADK agent"""
         start_time = time.time()
@@ -146,11 +182,17 @@ class ADKBaseAgent(ABC):
             
             # Send message and get response
             response = chat.send_message(user_message)
-            
-            # Handle function calls if any
+
+            # Handle function calls if any.
+            # NOTE: response.text raises if the candidate has no text part - which is
+            # exactly what happens whenever Gemini responds with a bare function call
+            # and no preceding text (the common case for "search flights to X" style
+            # requests). Reading it eagerly here used to blow up before we ever got a
+            # chance to execute the function call below, so every tool-triggering
+            # message failed. Only read .text where a text part might actually exist.
             function_calls = []
-            response_text = response.text
-            
+            response_text = self._extract_response_text(response)
+
             # Check for function calls in the response
             if response.candidates and len(response.candidates) > 0:
                 candidate = response.candidates[0]
@@ -159,19 +201,31 @@ class ADKBaseAgent(ABC):
                         if hasattr(part, 'function_call') and part.function_call:
                             function_call = part.function_call
                             self.logger.info(f"Function call detected: {function_call.name}")
-                            
-                            # Execute the function call
-                            function_response = self._handle_function_call(function_call)
+
+                            # Execute the function call. Sanitize the result too, not
+                            # just the args: several tools (e.g. search_activities,
+                            # search_hotels) echo their array-typed inputs straight back
+                            # into their own return value's search_params - so the same
+                            # unserializable RepeatedComposite reappears in the *result*
+                            # even after args is cleaned, and json.dumps() below (used to
+                            # relay the result back to Gemini) still blows up on it.
+                            function_response = self._jsonable(self._handle_function_call(function_call))
                             function_calls.append({
                                 "name": function_call.name,
-                                "args": dict(function_call.args),
+                                # dict(function_call.args) is only shallow: any array-typed
+                                # arg (e.g. "categories", "amenities") comes back as a
+                                # proto-plus RepeatedComposite, not a plain list, and Flask's
+                                # jsonify (json.dumps) can't serialize that - it blew up with
+                                # "Object of type RepeatedComposite is not JSON serializable"
+                                # on every tool call that used an array parameter.
+                                "args": self._jsonable(dict(function_call.args)),
                                 "result": function_response
                             })
-                            
+
                             # Send function response back to model
                             function_response_message = f"Function {function_call.name} returned: {json.dumps(function_response)}"
                             response = chat.send_message(function_response_message)
-                            response_text = response.text
+                            response_text = self._extract_response_text(response)
             
             # Update conversation memory
             self.conversation_memory[conversation_id]["history"] = chat.history[-10:]  # Keep last 10 exchanges

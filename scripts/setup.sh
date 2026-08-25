@@ -163,12 +163,13 @@ done
 
 print_success "IAM roles assigned successfully"
 
-# Grant Workload Identity role to the GKE service account
-print_success "Granting Workload Identity impersonation role..."
-gcloud iam service-accounts add-iam-policy-binding "$SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com" \
-    --role="roles/iam.workloadIdentityUser" \
-    --member="serviceAccount:$PROJECT_ID.svc.id.goog[adk-travel/adk-agents]" \
-    --quiet
+# NOTE: the Workload Identity binding (roles/iam.workloadIdentityUser on the GSA,
+# scoped to serviceAccount:$PROJECT_ID.svc.id.goog[...]) used to live here, but the
+# "$PROJECT_ID.svc.id.goog" identity pool doesn't exist until a GKE cluster with
+# workload_identity_config is actually created - on a fresh project this failed
+# immediately with "Identity Pool does not exist" and (set -e) killed the whole
+# script before Terraform ever ran. It's granted further below, after the cluster
+# is up.
 
 # Grant Artifact Registry Reader to default Compute Engine service account for GKE node access
 print_success "Granting Artifact Registry access to GKE nodes..."
@@ -240,6 +241,15 @@ print_success "Applying Terraform configuration..."
 terraform apply -auto-approve tfplan
 
 print_success "Infrastructure deployed successfully"
+
+# Now that the GKE cluster (and with it the $PROJECT_ID.svc.id.goog Workload Identity
+# pool) exists, bind the KSA used by the pods (adk-travel/adk-agents, see k8s/sa.yaml)
+# to the GSA so pods can authenticate to Vertex AI without a key file.
+print_success "Granting Workload Identity impersonation role..."
+gcloud iam service-accounts add-iam-policy-binding "$SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com" \
+    --role="roles/iam.workloadIdentityUser" \
+    --member="serviceAccount:$PROJECT_ID.svc.id.goog[adk-travel/adk-agents]" \
+    --quiet
 
 # Get outputs from Terraform
 print_success "Getting infrastructure details..."

@@ -203,8 +203,12 @@ IMAGE_LATEST="$REGISTRY_URL/$IMAGE_NAME:latest"
 print_status "Building image: $IMAGE_TAG"
 print_status "Building from directory: $(pwd)"
 
-# Build from current directory (which is now the parent directory)
-if docker build -t "$IMAGE_TAG" -t "$IMAGE_LATEST" .; then
+# Build from current directory (which is now the parent directory).
+# --platform linux/amd64 is required: GKE's default node pool (e2-standard-4) is amd64,
+# but `docker build` defaults to the host's architecture. Built on Apple Silicon/arm64
+# without this flag, the image ends up arm64-only and every pod fails to start with
+# ImagePullBackOff / "no match for platform in manifest".
+if docker build --platform linux/amd64 -t "$IMAGE_TAG" -t "$IMAGE_LATEST" .; then
     print_success "✅ Docker image built successfully"
 else
     print_error "❌ Docker build failed"
