@@ -83,8 +83,11 @@ class ADKBaseAgent(ABC):
             self.tools = self._define_tools()
             
             # Create generative model with tools
+            # Model is configurable via env (GEMINI_MODEL, set in k8s ConfigMap) because
+            # Vertex AI periodically retires older Gemini model IDs (e.g. gemini-1.5-pro).
+            model_name = os.getenv('GEMINI_MODEL', 'gemini-2.5-flash')
             model_kwargs = {
-                "model_name": "gemini-1.5-pro",
+                "model_name": model_name,
                 "system_instruction": self._get_system_instruction()
             }
             
@@ -279,10 +282,17 @@ class ADKBaseAgent(ABC):
             "tools_available": len(self.tools) if self.tools else 0
         }
     
-    def health_check(self) -> Dict[str, Any]:
-        """Comprehensive ADK agent health check"""
+    def health_check(self, deep: bool = False) -> Dict[str, Any]:
+        """ADK agent health check.
+
+        By default this is a cheap, local-only check (no outbound calls) so it's safe
+        to hit frequently from a Kubernetes liveness/readiness probe. Pass deep=True to
+        additionally exercise the live Vertex AI connection (real Gemini call) - use that
+        sparingly (e.g. manual diagnostics), not from a probe, or it will time out probes
+        and cause CrashLoopBackOff.
+        """
         health_status = {
-            "status": "healthy",
+            "status": "healthy" if self.model is not None else "degraded",
             "agent": self.agent_name,
             "specialization": self.specialization,
             "adk_version": "1.0",
@@ -292,16 +302,18 @@ class ADKBaseAgent(ABC):
             "tools_available": len(self.tools) if self.tools else 0,
             "timestamp": str(time.time())
         }
-        
-        # Test Vertex AI connectivity
-        try:
-            test_chat = self.model.start_chat()
-            test_response = test_chat.send_message("Health check test")
-            health_status["vertex_ai_status"] = "connected"
-        except Exception as e:
-            health_status["vertex_ai_status"] = f"error: {str(e)}"
-            health_status["status"] = "degraded"
-        
+        health_status["vertex_ai_status"] = "initialized" if self.model is not None else "not_initialized"
+
+        # Only make a real Vertex AI call when explicitly asked for (expensive/slow).
+        if deep:
+            try:
+                test_chat = self.model.start_chat()
+                test_chat.send_message("Health check test")
+                health_status["vertex_ai_status"] = "connected"
+            except Exception as e:
+                health_status["vertex_ai_status"] = f"error: {str(e)}"
+                health_status["status"] = "degraded"
+
         # Test Kubernetes connectivity
         if self.k8s_client:
             try:

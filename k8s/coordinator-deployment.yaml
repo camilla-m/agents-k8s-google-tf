@@ -41,9 +41,8 @@ spec:
           value: "1.0"
         - name: AI_PLATFORM_REGION
           value: "REGION"
-        - name: MODEL_NAME
-          value: "gemini-pro"
-        # ConfigMap reference
+        # ConfigMap reference (GEMINI_MODEL and the rest of the app config live here -
+        # see k8s/configmap.yaml, kept as the single source of truth)
         envFrom:
         - configMapRef:
             name: adk-config
@@ -95,22 +94,6 @@ spec:
     targetPort: 8080
     name: http
   type: LoadBalancer
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: adk-config
-  namespace: adk-travel
-data:
-  GOOGLE_CLOUD_PROJECT: "PROJECT_ID"
-  GOOGLE_CLOUD_LOCATION: "REGION"
-  ADK_VERSION: "1.0"
-  ENVIRONMENT: "production"
-  LOG_LEVEL: "INFO"
-  # AI Platform settings
-  AI_PLATFORM_REGION: "REGION"
-  MODEL_NAME: "gemini-pro"
-  # Feature flags
-  FLIGHT_AGENT_ENABLED: "true"
-  HOTEL_AGENT_ENABLED: "true"
-  ACTIVITY_AGENT_ENABLED: "true"
+# Note: the adk-config ConfigMap lives in k8s/configmap.yaml (single source of truth).
+# It used to be duplicated here with a different, drifting set of keys - removed to
+# avoid the two copies fighting each other depending on kubectl apply order.

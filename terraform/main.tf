@@ -117,11 +117,16 @@ resource "google_container_cluster" "adk_cluster" {
   }
 
   # Master authorized networks
+  # google_container_cluster only accepts a single master_authorized_networks_config
+  # block; the list of allowed CIDRs goes in its repeatable nested cidr_blocks. The
+  # previous version put the dynamic on the outer block too, which both produced one
+  # (duplicated) outer block per entry instead of one, and would error outright as
+  # soon as master_authorized_networks had more than one entry.
   dynamic "master_authorized_networks_config" {
-    for_each = var.master_authorized_networks
+    for_each = length(var.master_authorized_networks) > 0 ? [var.master_authorized_networks] : []
     content {
       dynamic "cidr_blocks" {
-        for_each = var.master_authorized_networks
+        for_each = master_authorized_networks_config.value
         content {
           cidr_block   = cidr_blocks.value.cidr_block
           display_name = cidr_blocks.value.display_name

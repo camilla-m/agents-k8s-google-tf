@@ -131,6 +131,20 @@ class TravelADKCoordinator:
                     "timestamp": time.time()
                 }), 500
         
+        @self.app.route('/ready', methods=['GET'])
+        def readiness_check():
+            """Lightweight readiness probe (no outbound calls) for Kubernetes.
+
+            Only reports whether the coordinator finished initializing its agents -
+            it must stay cheap and fast since kubelet calls this every few seconds.
+            """
+            if self.agents:
+                return jsonify({
+                    "status": "ready",
+                    "active_agents": list(self.agents.keys())
+                })
+            return jsonify({"status": "not_ready", "active_agents": []}), 503
+
         @self.app.route('/chat', methods=['POST'])
         def chat_with_coordinator():
             """Main ADK conversation endpoint with intelligent agent routing"""

@@ -185,17 +185,18 @@ def main():
         # Health check before starting
         logger.info("🔍 Running pre-startup health checks...")
         try:
-            # Test that agents can be initialized
+            # Test that agents can be initialized. Agents live in coordinator.agents
+            # (a dict keyed by "flight"/"hotel"/"activity") - there are no
+            # coordinator.flight_agent-style attributes.
+            total_agents = len(coordinator.agents)
             health_status = {
-                "flight": coordinator.flight_agent.health_check(),
-                "hotel": coordinator.hotel_agent.health_check(), 
-                "activity": coordinator.activity_agent.health_check()
+                name: agent.health_check() for name, agent in coordinator.agents.items()
             }
-            
+
             healthy_agents = sum(1 for status in health_status.values() if status.get('status') == 'healthy')
-            logger.info(f"✅ Health check passed: {healthy_agents}/3 agents healthy")
-            
-            if healthy_agents < 3:
+            logger.info(f"✅ Health check passed: {healthy_agents}/{total_agents} agents healthy")
+
+            if healthy_agents < total_agents:
                 logger.warning("⚠️  Some agents may not be fully initialized")
                 for agent_name, status in health_status.items():
                     if status.get('status') != 'healthy':

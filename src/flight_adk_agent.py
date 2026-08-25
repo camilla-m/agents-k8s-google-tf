@@ -62,7 +62,7 @@ class FlightADKAgent(ADKBaseAgent):
                                     "type": "integer",
                                     "description": "Number of passengers"
                                 },
-                                "class": {
+                                "travel_class": {
                                     "type": "string",
                                     "description": "Travel class: economy, business, first"
                                 }

@@ -186,19 +186,22 @@ print_header "Deploying Infrastructure with Terraform"
 cd "$PROJECT_ROOT/terraform"
 
 # Create terraform.tfvars if it doesn't exist
+#
+# NOTE: this repo's Terraform (terraform/main.tf) only provisions a VPC + GKE cluster -
+# there is no google_sql_database_instance resource. The app itself only ever talks to
+# mock data (see USE_MOCK_DATA in k8s/configmap.yaml). Older versions of this script
+# generated enable_cloud_sql/db_name/db_user/db_password entries here that referenced
+# variables which don't exist in variables.tf - Terraform silently ignored them
+# (undeclared variable warning) while implying a database was being created. Removed.
 if [ ! -f "terraform.tfvars" ]; then
     print_success "Creating terraform.tfvars..."
     cat > terraform.tfvars <<EOF
 project_id         = "$PROJECT_ID"
 region            = "$REGION"
 cluster_name      = "$CLUSTER_NAME"
-enable_cloud_sql  = true
 vpc_cidr_range    = "10.0.0.0/16"
 pod_cidr_range    = "10.1.0.0/16"
 services_cidr_range = "10.2.0.0/16"
-db_name           = "adk_travel_db"
-db_user           = "adk_user"
-db_password       = "$(openssl rand -base64 12 | tr -d '/+=' | head -c12)AdK!"
 master_authorized_networks = [
   {
     cidr_block   = "0.0.0.0/0"
@@ -211,7 +214,7 @@ resource_labels = {
   managed-by  = "terraform"
 }
 EOF
-    print_success "terraform.tfvars created with generated database password"
+    print_success "terraform.tfvars created"
 else
     print_warning "terraform.tfvars already exists - updating project settings..."
     # Update existing file with current project settings
@@ -262,8 +265,13 @@ sleep 30
 print_success "Creating namespace..."
 kubectl create namespace adk-travel --dry-run=client -o yaml | kubectl apply -f -
 
-print_success "Creating service account..."
-kubectl create serviceaccount adk-travel-ksa -n adk-travel --dry-run=client -o yaml | kubectl apply -f -
+# NOTE: the Kubernetes ServiceAccount used by the pods is "adk-agents" (namespace
+# adk-travel), created below from k8s/sa.yaml with the correct
+# iam.gke.io/gcp-service-account annotation - it must match the Workload Identity
+# binding above ($PROJECT_ID.svc.id.goog[adk-travel/adk-agents]). Do not create a
+# separate/differently-named KSA here, it would just be an orphaned, unbound account.
+print_success "Applying service account and RBAC (k8s/sa.yaml)..."
+sed "s|PROJECT_ID|$PROJECT_ID|g" "$PROJECT_ROOT/k8s/sa.yaml" | kubectl apply -f -
 
 print_success "Creating ConfigMap..."
 kubectl create configmap adk-config \
@@ -363,7 +371,7 @@ fi
 if [ ! -z "$ARTIFACT_REGISTRY_URL" ]; then
     echo "📦 Container Registry: $ARTIFACT_REGISTRY_URL"
 fi
-echo "🗄️  Database: Cloud SQL (if enabled in terraform.tfvars)"
+echo "🗄️  Database: none - the agents use mock travel data (USE_MOCK_DATA in k8s/configmap.yaml)"
 echo "🔐 Service Account: $SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com"
 echo ""
 
