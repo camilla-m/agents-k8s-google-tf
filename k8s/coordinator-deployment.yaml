@@ -25,6 +25,9 @@ spec:
         ports:
         - containerPort: 8080
           name: http
+        # Only variables the app actually reads (verified against src/ and main.py) -
+        # ENVIRONMENT, ADK_VERSION and AI_PLATFORM_REGION used to be set here too but
+        # no code path ever calls os.getenv() for them.
         env:
         - name: PORT
           value: "8080"
@@ -32,15 +35,8 @@ spec:
           value: "PROJECT_ID"
         - name: GOOGLE_CLOUD_LOCATION
           value: "REGION"
-        - name: ENVIRONMENT
-          value: "production"
         - name: LOG_LEVEL
           value: "INFO"
-        # ADK specific settings
-        - name: ADK_VERSION
-          value: "1.0"
-        - name: AI_PLATFORM_REGION
-          value: "REGION"
         # ConfigMap reference (GEMINI_MODEL and the rest of the app config live here -
         # see k8s/configmap.yaml, kept as the single source of truth)
         envFrom:

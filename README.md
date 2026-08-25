@@ -89,7 +89,7 @@ curl -X POST http://localhost:8080/plan \
 ## 📊 Key Features
 
 - ✅ **No Database Required** - Pure AI agent interactions
-- ✅ **Scalable** - Kubernetes horizontal pod autoscaling
+- ✅ **Scalable** - manually via `kubectl scale` (no HorizontalPodAutoscaler is defined yet - add one in k8s/ if you need automatic scaling)
 - ✅ **Cloud-Native** - Built for Google Cloud Platform
 - ✅ **AI-Powered** - Uses Google's latest AI models
 - ✅ **Simple** - Easy to deploy and understand
@@ -125,7 +125,6 @@ python3 scripts/test_adk_demo.py --quick       # Quick tests
 ## 🔐 Security
 
 - **Workload Identity** for secure GCP service authentication
-- **Network policies** for pod-to-pod communication
 - **Non-root containers** for enhanced security
 
 ## 💰 Cost Optimization

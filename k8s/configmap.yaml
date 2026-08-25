@@ -10,52 +10,24 @@ metadata:
   annotations:
     description: "Configuration for Google ADK Travel System - Service Account Only"
 data:
-  # Google Cloud Configuration (ONLY REQUIRED CONFIG)
+  # Only variables the app actually reads (verified against src/ and main.py). This
+  # used to also list ~20 more keys - ADK_VERSION, FLASK_ENV, CONVERSATION_TIMEOUT,
+  # MAX_CONVERSATION_TURNS, CONVERSATION_CLEANUP_INTERVAL, THREAD_POOL_MAX_WORKERS,
+  # REQUEST_TIMEOUT, AGENT_QUERY_TIMEOUT, PLANNING_QUERY_TIMEOUT, METRICS_ENABLED,
+  # HEALTH_CHECK_INTERVAL, CORS_ENABLED, RATE_LIMITING_ENABLED, USE_MOCK_DATA,
+  # MOCK_FLIGHT_DATA, MOCK_HOTEL_DATA, MOCK_ACTIVITY_DATA, GEMINI_TEMPERATURE,
+  # GEMINI_MAX_OUTPUT_TOKENS, USE_SERVICE_ACCOUNT_ONLY - none of which any code path
+  # ever calls os.getenv() for. Removed rather than left as unused config that looks
+  # load-bearing but isn't. If you wire one of these up in code, add it back here.
   GOOGLE_CLOUD_PROJECT: "PROJECT_ID"  # This will be replaced by deploy script
   GOOGLE_CLOUD_LOCATION: "REGION"
-  
-  # ADK Configuration
-  ADK_VERSION: "1.0"
-  
-  # Application Configuration
   LOG_LEVEL: "INFO"
   DEBUG: "false"
   HOST: "0.0.0.0"
   PORT: "8080"
   METRICS_PORT: "8090"
-  
-  # Flask Configuration
-  FLASK_ENV: "production"
-  
-  # Agent Configuration
-  CONVERSATION_TIMEOUT: "1800"  # 30 minutes
-  MAX_CONVERSATION_TURNS: "50"
-  CONVERSATION_CLEANUP_INTERVAL: "3600"  # 1 hour
-  
-  # Performance Configuration
-  THREAD_POOL_MAX_WORKERS: "10"
-  REQUEST_TIMEOUT: "30"
-  AGENT_QUERY_TIMEOUT: "45"
-  PLANNING_QUERY_TIMEOUT: "60"
-  
-  # Monitoring Configuration
-  METRICS_ENABLED: "true"
-  HEALTH_CHECK_INTERVAL: "30"
-  
-  # Security Configuration
-  CORS_ENABLED: "false"
-  RATE_LIMITING_ENABLED: "false"
-  
-  # Data Configuration (using mock data for travel APIs)
-  USE_MOCK_DATA: "true"
-  MOCK_FLIGHT_DATA: "true"
-  MOCK_HOTEL_DATA: "true"
-  MOCK_ACTIVITY_DATA: "true"
-  
-  # Gemini Configuration (via Service Account)
-  # gemini-1.5-pro/gemini-pro are retired on Vertex AI - keep this in sync with
-  # whatever Gemini model family is currently supported for your project/region.
+
+  # Gemini model (via Workload Identity, no API key). gemini-1.5-pro/gemini-pro are
+  # retired on Vertex AI - keep this in sync with whatever Gemini model family is
+  # currently supported for your project/region.
   GEMINI_MODEL: "gemini-2.5-flash"
-  GEMINI_TEMPERATURE: "0.7"
-  GEMINI_MAX_OUTPUT_TOKENS: "2048"
-  USE_SERVICE_ACCOUNT_ONLY: "true"

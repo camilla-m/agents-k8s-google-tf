@@ -283,14 +283,15 @@ kubectl create namespace adk-travel --dry-run=client -o yaml | kubectl apply -f 
 print_success "Applying service account and RBAC (k8s/sa.yaml)..."
 sed "s|PROJECT_ID|$PROJECT_ID|g" "$PROJECT_ROOT/k8s/sa.yaml" | kubectl apply -f -
 
-print_success "Creating ConfigMap..."
-kubectl create configmap adk-config \
-    --from-literal=GOOGLE_CLOUD_PROJECT="$PROJECT_ID" \
-    --from-literal=GOOGLE_CLOUD_LOCATION="$REGION" \
-    --from-literal=ADK_VERSION="1.0" \
-    --from-literal=ENVIRONMENT="production" \
-    -n adk-travel \
-    --dry-run=client -o yaml | kubectl apply -f -
+# NOTE: this used to also `kubectl create configmap adk-config --from-literal=...`
+# with its own smaller set of keys (missing GEMINI_MODEL among others) - a third,
+# competing definition of the same ConfigMap alongside k8s/configmap.yaml (the real
+# one, with every key the app actually reads - see its own comment for which keys
+# that is). deploy.sh applies k8s/configmap.yaml moments after this script finishes
+# and would overwrite it anyway, so just apply the real one here directly instead of
+# creating a partial one that's about to be replaced.
+print_success "Applying ConfigMap (k8s/configmap.yaml)..."
+sed -e "s|PROJECT_ID|$PROJECT_ID|g" -e "s|REGION|$REGION|g" "$PROJECT_ROOT/k8s/configmap.yaml" | kubectl apply -f -
 
 # No secrets required for GSA key files under Workload Identity
 
