@@ -117,11 +117,16 @@ resource "google_container_cluster" "adk_cluster" {
   }
 
   # Master authorized networks
+  # google_container_cluster only accepts a single master_authorized_networks_config
+  # block; the list of allowed CIDRs goes in its repeatable nested cidr_blocks. The
+  # previous version put the dynamic on the outer block too, which both produced one
+  # (duplicated) outer block per entry instead of one, and would error outright as
+  # soon as master_authorized_networks had more than one entry.
   dynamic "master_authorized_networks_config" {
-    for_each = var.master_authorized_networks
+    for_each = length(var.master_authorized_networks) > 0 ? [var.master_authorized_networks] : []
     content {
       dynamic "cidr_blocks" {
-        for_each = var.master_authorized_networks
+        for_each = master_authorized_networks_config.value
         content {
           cidr_block   = cidr_blocks.value.cidr_block
           display_name = cidr_blocks.value.display_name
@@ -220,35 +225,15 @@ resource "google_container_cluster" "adk_cluster" {
   }
 }
 
-# Service account for ADK workloads (if not using Autopilot default)
-resource "google_service_account" "adk_workload_identity" {
-  count        = var.enable_autopilot ? 0 : 1
-  account_id   = "${var.cluster_name}-wi-sa"
-  display_name = "Workload Identity Service Account for ${var.cluster_name}"
-  description  = "Service account for ADK workloads with Workload Identity"
-}
-
-# IAM bindings for the workload identity service account
-resource "google_project_iam_member" "adk_workload_identity_roles" {
-  count   = var.enable_autopilot ? 0 : length(local.workload_identity_roles)
-  project = var.project_id
-  role    = local.workload_identity_roles[count.index]
-  member  = "serviceAccount:${google_service_account.adk_workload_identity[0].email}"
-}
-
-locals {
-  workload_identity_roles = [
-    "roles/logging.logWriter",
-    "roles/monitoring.metricWriter",
-    "roles/monitoring.viewer",
-    "roles/aiplatform.user",
-  ]
-}
-
-# Enable Workload Identity binding (if not using Autopilot)
-resource "google_service_account_iam_member" "adk_workload_identity_binding" {
-  count              = var.enable_autopilot ? 0 : 1
-  service_account_id = google_service_account.adk_workload_identity[0].name
-  role               = "roles/iam.workloadIdentityUser"
-  member             = "serviceAccount:${var.project_id}.svc.id.goog[adk-travel/adk-agents]"
-}
+# NOTE: this used to also create a second service account ("<cluster>-wi-sa") with its
+# own IAM roles and a Workload Identity binding to the same adk-travel/adk-agents KSA
+# that scripts/setup.sh already binds to $service_account_name (adk-travel-sa, the GSA
+# that k8s/sa.yaml's iam.gke.io/gcp-service-account annotation actually points at).
+# That second GSA was never referenced anywhere - pure dead weight - and its binding
+# resource had no depends_on the cluster, so Terraform tried to create it in parallel
+# with google_container_cluster.adk_cluster and failed outright ("Identity Pool does
+# not exist") because the $project_id.svc.id.goog pool isn't provisioned until the
+# cluster (with workload_identity_config) actually exists. Removed rather than patched
+# with depends_on, since nothing used it. The real GSA/KSA binding for the pods is done
+# by scripts/setup.sh (gcloud iam service-accounts add-iam-policy-binding), run after
+# this Terraform apply so the cluster - and its Workload Identity pool - already exist.

@@ -25,6 +25,9 @@ spec:
         ports:
         - containerPort: 8080
           name: http
+        # Only variables the app actually reads (verified against src/ and main.py) -
+        # ENVIRONMENT, ADK_VERSION and AI_PLATFORM_REGION used to be set here too but
+        # no code path ever calls os.getenv() for them.
         env:
         - name: PORT
           value: "8080"
@@ -32,18 +35,10 @@ spec:
           value: "PROJECT_ID"
         - name: GOOGLE_CLOUD_LOCATION
           value: "REGION"
-        - name: ENVIRONMENT
-          value: "production"
         - name: LOG_LEVEL
           value: "INFO"
-        # ADK specific settings
-        - name: ADK_VERSION
-          value: "1.0"
-        - name: AI_PLATFORM_REGION
-          value: "REGION"
-        - name: MODEL_NAME
-          value: "gemini-pro"
-        # ConfigMap reference
+        # ConfigMap reference (GEMINI_MODEL and the rest of the app config live here -
+        # see k8s/configmap.yaml, kept as the single source of truth)
         envFrom:
         - configMapRef:
             name: adk-config
@@ -70,10 +65,16 @@ spec:
           periodSeconds: 5
           timeoutSeconds: 3
           failureThreshold: 2
-        # Security context
+        # Security context. runAsUser must match the adk-user uid created in the
+        # Dockerfile (1000) - runAsGroup is set explicitly too because leaving it out
+        # made the container run with gid=0 (root) instead of adk-user's group, which
+        # (combined with the uid mismatch this fixes) is why the /dev-ui runtime
+        # config write used to fail with Permission Denied despite /app being chowned
+        # to adk-user.
         securityContext:
           runAsNonRoot: true
           runAsUser: 1000
+          runAsGroup: 1000
           readOnlyRootFilesystem: false
           allowPrivilegeEscalation: false
           capabilities:
@@ -95,22 +96,6 @@ spec:
     targetPort: 8080
     name: http
   type: LoadBalancer
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: adk-config
-  namespace: adk-travel
-data:
-  GOOGLE_CLOUD_PROJECT: "PROJECT_ID"
-  GOOGLE_CLOUD_LOCATION: "REGION"
-  ADK_VERSION: "1.0"
-  ENVIRONMENT: "production"
-  LOG_LEVEL: "INFO"
-  # AI Platform settings
-  AI_PLATFORM_REGION: "REGION"
-  MODEL_NAME: "gemini-pro"
-  # Feature flags
-  FLIGHT_AGENT_ENABLED: "true"
-  HOTEL_AGENT_ENABLED: "true"
-  ACTIVITY_AGENT_ENABLED: "true"
+# Note: the adk-config ConfigMap lives in k8s/configmap.yaml (single source of truth).
+# It used to be duplicated here with a different, drifting set of keys - removed to
+# avoid the two copies fighting each other depending on kubectl apply order.

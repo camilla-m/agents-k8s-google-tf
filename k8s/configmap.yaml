@@ -10,50 +10,20 @@ metadata:
   annotations:
     description: "Configuration for Google ADK Travel System - Service Account Only"
 data:
-  # Google Cloud Configuration (ONLY REQUIRED CONFIG)
+  # Only variables the app actually reads (verified with grep against agents/ and
+  # main.py). Keep it that way - see git history for what happens when config drifts
+  # from what the code reads (dead keys that look load-bearing but aren't, or three
+  # competing definitions of the same ConfigMap).
   GOOGLE_CLOUD_PROJECT: "PROJECT_ID"  # This will be replaced by deploy script
   GOOGLE_CLOUD_LOCATION: "REGION"
-  
-  # ADK Configuration
-  ADK_VERSION: "1.0"
-  
-  # Application Configuration
   LOG_LEVEL: "INFO"
-  DEBUG: "false"
-  HOST: "0.0.0.0"
   PORT: "8080"
-  METRICS_PORT: "8090"
-  
-  # Flask Configuration
-  FLASK_ENV: "production"
-  
-  # Agent Configuration
-  CONVERSATION_TIMEOUT: "1800"  # 30 minutes
-  MAX_CONVERSATION_TURNS: "50"
-  CONVERSATION_CLEANUP_INTERVAL: "3600"  # 1 hour
-  
-  # Performance Configuration
-  THREAD_POOL_MAX_WORKERS: "10"
-  REQUEST_TIMEOUT: "30"
-  AGENT_QUERY_TIMEOUT: "45"
-  PLANNING_QUERY_TIMEOUT: "60"
-  
-  # Monitoring Configuration
-  METRICS_ENABLED: "true"
-  HEALTH_CHECK_INTERVAL: "30"
-  
-  # Security Configuration
-  CORS_ENABLED: "false"
-  RATE_LIMITING_ENABLED: "false"
-  
-  # Data Configuration (using mock data for travel APIs)
-  USE_MOCK_DATA: "true"
-  MOCK_FLIGHT_DATA: "true"
-  MOCK_HOTEL_DATA: "true"
-  MOCK_ACTIVITY_DATA: "true"
-  
-  # Gemini Configuration (via Service Account)
-  GEMINI_MODEL: "gemini-1.5-pro"
-  GEMINI_TEMPERATURE: "0.7"
-  GEMINI_MAX_OUTPUT_TOKENS: "2048"
-  USE_SERVICE_ACCOUNT_ONLY: "true"
+
+  # Use Vertex AI (Workload Identity / ADC), not the Gemini Developer API - which
+  # would need GOOGLE_API_KEY, which we deliberately don't set.
+  GOOGLE_GENAI_USE_VERTEXAI: "TRUE"
+
+  # Gemini model. gemini-1.5-pro/gemini-pro are retired on Vertex AI - keep this in
+  # sync with whatever Gemini model family is currently supported for your
+  # project/region.
+  GEMINI_MODEL: "gemini-2.5-flash"
