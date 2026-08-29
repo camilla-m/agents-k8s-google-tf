@@ -271,7 +271,8 @@ gcloud beta billing projects describe YOUR_GCP_PROJECT_ID
 
 ## 🚀 Quick Start
 
-Make sure `gcloud`, `kubectl`, `terraform` and `docker` are installed and that you
+Make sure `gcloud`, `kubectl`, `terraform` and `docker` are installed (`docker` is
+not needed if you deploy with [`--cloud-build`](#-building-with-cloud-build)) and that you
 are authenticated (see [Requirements & Installation](#-requirements--installation)),
 then follow these steps to deploy the system automatically:
 
@@ -369,7 +370,13 @@ curl -X POST http://localhost:8080/plan \
 ```bash
 ./scripts/setup.sh PROJECT_ID  [REGION]        # Quick setup
 ./scripts/deploy.sh PROJECT_ID [REGION]        # Full deployment
+./scripts/deploy.sh PROJECT_ID --cloud-build   # Build the image remotely
 ```
+
+`--cloud-build` hands the image build and push to Cloud Build instead of your local
+Docker daemon. Use it when your machine cannot reach Artifact Registry reliably, or
+when you simply do not want to wait on a local cross-build. See
+[Building with Cloud Build](#-building-with-cloud-build).
 
 ### Testing
 ```bash
@@ -393,6 +400,48 @@ python3 scripts/test_adk_demo.py --quick       # Quick tests
 - **Preemptible nodes** in development environment
 - **Horizontal Pod Autoscaling** to scale based on demand
 - **Efficient resource requests** and limits
+
+## ☁️ Building with Cloud Build
+
+By default `scripts/deploy.sh` builds the image with your local Docker daemon and pushes
+it to Artifact Registry. Passing `--cloud-build` moves both steps into Google's
+infrastructure instead:
+
+```bash
+./scripts/deploy.sh YOUR_GCP_PROJECT_ID --cloud-build
+```
+
+Why you might want it:
+
+- **The push never crosses your network.** This is the reliable way around the
+  intermittent `connection refused` from the Artifact Registry frontends described in
+  [Troubleshooting](#docker-push-fails-with-connection-refused).
+- **No local Docker required.** The script drops `docker` from its prerequisite check
+  under this flag, which makes it usable from Cloud Shell as-is.
+- **No cross-build.** Cloud Build workers are amd64, same as the GKE nodes, so the
+  `--platform linux/amd64` dance needed on Apple Silicon disappears.
+
+Trade-offs: builds are billed after the 120 free minutes per day (roughly US$0.003/min
+on the default worker), and you lose your local Docker layer cache, so a remote build
+starts cold every time.
+
+The build is defined in [`cloudbuild.yaml`](cloudbuild.yaml), which tags the image twice
+(timestamp and `latest`) and lets Cloud Build perform the push via its `images:` block.
+[`.gcloudignore`](.gcloudignore) keeps `terraform/` out of the uploaded source archive:
+once `.terraform/` has downloaded its providers that directory is around 109 MB, and it
+would otherwise be uploaded on every deploy.
+
+### First-run permissions
+
+The flag enables `cloudbuild.googleapis.com` for you, but the build service account
+still needs write access to the registry. If a build fails with a permissions error:
+
+```bash
+PROJECT_NUMBER=$(gcloud projects describe YOUR_GCP_PROJECT_ID --format='value(projectNumber)')
+gcloud projects add-iam-policy-binding YOUR_GCP_PROJECT_ID \
+  --member="serviceAccount:$PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
+  --role=roles/artifactregistry.writer
+```
 
 ## 🚨 Troubleshooting
 
@@ -457,6 +506,9 @@ minutes later.
 `scripts/deploy.sh` now retries the push up to 5 times with exponential backoff, which
 absorbs this. Blobs that already uploaded are skipped, so retries are cheap. If you are
 pushing by hand, just run the command again.
+
+To avoid the local push entirely, use [`--cloud-build`](#-building-with-cloud-build),
+which builds and pushes from inside Google's network.
 
 To confirm the pool is healthy before retrying (a `401` is the CORRECT answer here - the
 endpoint requires a token):

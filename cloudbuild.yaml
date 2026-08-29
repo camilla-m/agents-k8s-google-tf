@@ -1,0 +1,36 @@
+# Cloud Build config used by `./scripts/deploy.sh PROJECT_ID --cloud-build`.
+#
+# Building here instead of locally means the image is built and pushed entirely inside
+# Google's infrastructure, so the push never crosses your network. That sidesteps the
+# intermittent `connection refused` from the Artifact Registry anycast frontends (see
+# the Troubleshooting section of the README). It also removes the need for
+# --platform linux/amd64, since Cloud Build workers are already amd64 like the GKE
+# nodes.
+#
+# Both tags are declared under `images:`, which is what makes Cloud Build push them;
+# the docker step only builds.
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    id: build
+    args:
+      - build
+      - --tag=${_IMAGE_TAG}
+      - --tag=${_IMAGE_LATEST}
+      - .
+
+images:
+  - ${_IMAGE_TAG}
+  - ${_IMAGE_LATEST}
+
+# pip install of the requirements can take a while on a cold layer cache; the default
+# 10m timeout is tight for it.
+timeout: 1800s
+
+options:
+  machineType: E2_HIGHCPU_8
+  # Builds run as the Compute Engine default service account, which has no permission
+  # on the legacy Cloud Build logs bucket. Without this, the build fails immediately
+  # with "could not resolve source" / a logging-bucket error rather than anything
+  # about the image itself.
+  logging: CLOUD_LOGGING_ONLY
