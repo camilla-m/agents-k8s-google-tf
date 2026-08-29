@@ -439,6 +439,77 @@ kubectl describe pod <pod-name> -n adk-travel
 kubectl logs <pod-name> -n adk-travel
 ```
 
+### `docker push` fails with `connection refused`
+
+```
+failed to do request: Head "https://us-central1-docker.pkg.dev/v2/<project>/adk-travel/<image>/blobs/sha256:...":
+dial tcp 142.251.107.82:443: connect: connection refused
+```
+
+This is a **network** failure on Google's side, not an authentication one (auth problems
+return `401` or `denied`, never `connection refused`), and not something wrong with your
+machine. `us-central1-docker.pkg.dev` is served by an anycast pool behind
+`googlecode.l.googleusercontent.com`, and individual frontends in that pool
+intermittently refuse the connection. The same error reproduces from a laptop and from
+Cloud Shell, on different IPs each time, and the refusing IPs answer normally again
+minutes later.
+
+`scripts/deploy.sh` now retries the push up to 5 times with exponential backoff, which
+absorbs this. Blobs that already uploaded are skipped, so retries are cheap. If you are
+pushing by hand, just run the command again.
+
+To confirm the pool is healthy before retrying (a `401` is the CORRECT answer here - the
+endpoint requires a token):
+
+```bash
+for ip in $(dig +short us-central1-docker.pkg.dev A | grep -E '^[0-9]'); do
+  printf "%-16s " "$ip"
+  curl -sS -o /dev/null -w "%{http_code}\n" --max-time 8 \
+    --resolve "us-central1-docker.pkg.dev:443:$ip" \
+    https://us-central1-docker.pkg.dev/v2/
+done
+```
+
+If every IP hangs or is refused for several minutes straight, the block is local rather
+than transient: check your VPN, corporate proxy, or the `HTTP_PROXY` / `HTTPS_PROXY`
+variables in your shell and in your container runtime's settings. Note that on macOS the
+push runs inside your container runtime's VM (Rancher Desktop, Colima, Docker Desktop),
+so test from there too:
+
+```bash
+docker run --rm alpine:3.20 sh -c \
+  'apk add -q curl && curl -sS -o /dev/null -w "%{http_code} %{remote_ip}\n" https://us-central1-docker.pkg.dev/v2/'
+```
+
+### `docker push` fails with `denied` / `unauthorized`
+
+The Artifact Registry credential helper is missing from `~/.docker/config.json`.
+It should contain:
+
+```json
+{
+  "credHelpers": {
+    "us-central1-docker.pkg.dev": "gcloud"
+  }
+}
+```
+
+`scripts/deploy.sh` registers it automatically, but some tools (Rancher Desktop and
+Docker Desktop among them) rewrite `config.json` and drop the entry. Re-add it with:
+
+```bash
+gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+```
+
+### `gcloud: command not found` while the SDK is installed
+
+The installer appends `gcloud` to your shell rc file, so it is missing from
+non-interactive shells (scripts, CI, IDE terminals). Prepend it explicitly:
+
+```bash
+export PATH="$HOME/google-cloud-sdk/bin:$PATH"   # or the path from `which gcloud`
+```
+
 ### Useful Debug Commands
 ```bash
 kubectl get events --sort-by='.lastTimestamp' -n adk-travel
