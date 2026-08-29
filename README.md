@@ -371,9 +371,36 @@ python3 scripts/test_adk_demo.py --quick       # Quick tests
 
 ## 💰 Cost Optimization
 
-- **Preemptible nodes** in development environment
-- **Horizontal Pod Autoscaling** to scale based on demand
-- **Efficient resource requests** and limits
+What is actually configured today:
+
+- **Explicit resource requests and limits** on the coordinator pod
+  (`512Mi` / `250m` requested, `1Gi` / `500m` limit, in
+  [k8s/coordinator-deployment.yaml](k8s/coordinator-deployment.yaml#L45)), so the
+  scheduler packs pods instead of over-provisioning nodes.
+- **Preemptible nodes are supported but off by default.** The `preemptible`
+  variable defaults to `false` in
+  [terraform/variables.tf](terraform/variables.tf#L238). Set `preemptible = true`
+  in your `terraform.tfvars` for a dev cluster to cut node cost substantially, at
+  the price of nodes being reclaimed with 30s notice.
+
+Things you may expect but that are **not** set up yet:
+
+- **No HorizontalPodAutoscaler.** The GKE HPA addon is enabled on the cluster
+  ([terraform/main.tf](terraform/main.tf#L179)), so HPA objects would work, but
+  none is defined in [k8s/](k8s/) and the deployment sits at a fixed
+  `replicas: 3`. Scale manually with `kubectl scale` (see
+  [Scaling](#-scaling)) or add an HPA yourself.
+- **No cluster autoscaler.** The node pool is fixed. The `enable_autoscaling`,
+  `min_node_count` and `max_node_count` variables exist in
+  [terraform/variables.tf](terraform/variables.tf#L94) but are never referenced by
+  any resource, so setting them has no effect.
+
+The default cluster is regional with `e2-standard-4` nodes and 100 GB disks, which
+is not cheap to leave running. Tear it down when you are done:
+
+```bash
+./scripts/cleanup.sh PROJECT_ID [REGION]
+```
 
 ## 🚨 Troubleshooting
 
