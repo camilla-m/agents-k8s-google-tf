@@ -15,9 +15,246 @@ Based on the [camilla-m/agents-k8s-google-tf](https://github.com/camilla-m/agent
 - **Pure AI Experience**: No database storage, just intelligent agent interactions
 - **Cloud-Native**: Scalable on Google Cloud with Kubernetes
 
+## 🛠️ Requirements & Installation
+
+The deployment scripts (`scripts/setup.sh`, `scripts/deploy.sh`) check for four CLI
+tools up front and abort with `❌ <tool> is required but not installed` if any is
+missing. Install all four before running anything.
+
+| Tool | Minimum version | Used for |
+|------|-----------------|----------|
+| [Google Cloud SDK (`gcloud`)](https://cloud.google.com/sdk/docs/install) | 450+ | Enabling APIs, creating the service account, cluster credentials, Artifact Registry auth |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | 1.28+ | Applying the manifests in [k8s/](k8s/), port-forwarding, logs |
+| [Terraform](https://developer.hashicorp.com/terraform/install) | 1.0+ (see `required_version` in [terraform/main.tf](terraform/main.tf#L5)) | Provisioning the GKE cluster, node pool and IAM |
+| [Docker](https://docs.docker.com/get-docker/) | 24+ | Building and pushing the agent image |
+
+Also required:
+
+- A **Google Cloud project with billing enabled** and the `roles/owner` (or an
+  equivalent set of) permissions, since setup enables APIs and creates IAM bindings.
+- **Python 3.9+** with `requests`, only if you want to run `scripts/test_adk_demo.py`
+  (`pip install requests`). Not needed to deploy.
+
+### Verify what you already have
+
+```bash
+gcloud version && kubectl version --client && terraform version && docker --version
+```
+
+If every command prints a version, skip to [Quick Start](#-quick-start).
+
+---
+
+### 🐧 Linux (Debian / Ubuntu)
+
+```bash
+# Common prerequisites for the apt repositories below
+sudo apt-get update
+sudo apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
+
+# 1. Google Cloud SDK (includes gcloud + the gke-gcloud-auth-plugin)
+curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+  | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
+  | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list
+sudo apt-get update && sudo apt-get install -y google-cloud-cli google-cloud-cli-gke-gcloud-auth-plugin
+
+# 2. kubectl (from the same Google repo)
+sudo apt-get install -y kubectl
+
+# 3. Terraform (HashiCorp apt repo)
+wget -O- https://apt.releases.hashicorp.com/gpg \
+  | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" \
+  | sudo tee /etc/apt/sources.list.d/hashicorp.list
+sudo apt-get update && sudo apt-get install -y terraform
+
+# 4. Docker Engine
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker "$USER"   # log out and back in for this to take effect
+```
+
+<details>
+<summary>Fedora / RHEL / CentOS</summary>
+
+```bash
+# Google Cloud SDK + kubectl
+sudo tee /etc/yum.repos.d/google-cloud-sdk.repo <<'EOF'
+[google-cloud-cli]
+name=Google Cloud CLI
+baseurl=https://packages.cloud.google.com/yum/repos/cloud-sdk-el9-x86_64
+enabled=1
+gpgcheck=1
+repo_gpgcheck=0
+gpgkey=https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+EOF
+sudo dnf install -y google-cloud-cli google-cloud-cli-gke-gcloud-auth-plugin kubectl
+
+# Terraform
+sudo dnf install -y dnf-plugins-core
+sudo dnf config-manager --add-repo https://rpm.releases.hashicorp.com/fedora/hashicorp.repo
+sudo dnf install -y terraform
+
+# Docker
+curl -fsSL https://get.docker.com | sudo sh
+sudo systemctl enable --now docker
+sudo usermod -aG docker "$USER"
+```
+</details>
+
+<details>
+<summary>Arch Linux</summary>
+
+```bash
+sudo pacman -S --needed kubectl terraform docker
+sudo systemctl enable --now docker
+sudo usermod -aG docker "$USER"
+# google-cloud-cli lives in the AUR:
+yay -S google-cloud-cli google-cloud-cli-gke-gcloud-auth-plugin
+```
+</details>
+
+<details>
+<summary>Any Linux distro (no root / no package manager)</summary>
+
+```bash
+# Google Cloud SDK - installs into ~/google-cloud-sdk and updates your shell rc
+curl https://sdk.cloud.google.com | bash && exec -l $SHELL
+gcloud components install kubectl gke-gcloud-auth-plugin
+
+# Terraform - static binary
+TF_VERSION=1.9.8
+curl -fsSLO "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip"
+unzip "terraform_${TF_VERSION}_linux_amd64.zip" && mkdir -p ~/.local/bin && mv terraform ~/.local/bin/
+export PATH="$HOME/.local/bin:$PATH"   # add this line to ~/.bashrc
+```
+Docker still needs root to install; use [Rootless mode](https://docs.docker.com/engine/security/rootless/) if you cannot use `sudo`.
+</details>
+
+---
+
+### 🍎 macOS
+
+Using [Homebrew](https://brew.sh/) (install it first if you don't have it):
+
+```bash
+# Homebrew itself
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# All four tools
+brew install --cask google-cloud-sdk docker
+brew install kubectl terraform
+
+# GKE auth plugin (gcloud needs it to talk to the cluster)
+gcloud components install gke-gcloud-auth-plugin
+```
+
+Then **launch Docker Desktop once** from Applications so the daemon starts;
+`docker --version` works without it, but `docker build` will fail with
+`Cannot connect to the Docker daemon` until the daemon is running.
+
+> **Apple Silicon (M1/M2/M3/M4):** the image is built for `linux/amd64` because the
+> GKE nodes are x86. `scripts/deploy.sh` already passes `--platform linux/amd64`, so
+> there is nothing to configure, but the build runs under emulation and is slower
+> than on an Intel Mac.
+
+<details>
+<summary>Without Homebrew</summary>
+
+```bash
+# Google Cloud SDK (includes gcloud, and can install kubectl)
+curl https://sdk.cloud.google.com | bash && exec -l $SHELL
+gcloud components install kubectl gke-gcloud-auth-plugin
+
+# Terraform
+TF_VERSION=1.9.8
+ARCH=$([ "$(uname -m)" = "arm64" ] && echo arm64 || echo amd64)
+curl -fsSLO "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_darwin_${ARCH}.zip"
+unzip "terraform_${TF_VERSION}_darwin_${ARCH}.zip" && sudo mv terraform /usr/local/bin/
+```
+Docker Desktop: download the `.dmg` from [docker.com](https://docs.docker.com/desktop/install/mac-install/).
+</details>
+
+---
+
+### 🪟 Windows
+
+> **Important:** `scripts/setup.sh`, `deploy.sh`, `cleanup.sh` and `status.sh` are
+> **bash** scripts. They will not run in PowerShell or `cmd.exe`. Choose one of the
+> two paths below.
+
+#### Option A - WSL2 (recommended)
+
+Gives you a real Linux shell, so the scripts run unmodified.
+
+```powershell
+# In PowerShell as Administrator, then reboot
+wsl --install -d Ubuntu
+```
+
+After rebooting, open the **Ubuntu** terminal and follow the
+[Linux (Debian / Ubuntu)](#-linux-debian--ubuntu) steps above. For Docker, install
+[Docker Desktop for Windows](https://docs.docker.com/desktop/install/windows-install/)
+and enable **Settings → Resources → WSL Integration → Ubuntu** so the `docker`
+command works from inside WSL. Do not install Docker Engine separately inside WSL.
+
+#### Option B - Git Bash + native Windows tools
+
+Install the tools on Windows, then run the scripts from **Git Bash** (bundled with
+[Git for Windows](https://git-scm.com/download/win)).
+
+Using [winget](https://learn.microsoft.com/en-us/windows/package-manager/winget/)
+(ships with Windows 11 and recent Windows 10), in PowerShell:
+
+```powershell
+winget install --id Google.CloudSDK       -e
+winget install --id Kubernetes.kubectl    -e
+winget install --id HashiCorp.Terraform   -e
+winget install --id Docker.DockerDesktop  -e
+winget install --id Git.Git               -e
+
+# GKE auth plugin
+gcloud components install gke-gcloud-auth-plugin
+```
+
+Or with [Chocolatey](https://chocolatey.org/install) in an **Administrator**
+PowerShell:
+
+```powershell
+choco install -y gcloudsdk kubernetes-cli terraform docker-desktop git
+gcloud components install gke-gcloud-auth-plugin
+```
+
+Close and reopen your terminal afterwards so the updated `PATH` is picked up, then
+run the deployment from Git Bash:
+
+```bash
+./scripts/setup.sh YOUR_GCP_PROJECT_ID
+```
+
+---
+
+### Authenticate with Google Cloud
+
+Do this once, on every platform, before running the deployment:
+
+```bash
+gcloud auth login                        # your user account, for gcloud/terraform
+gcloud auth application-default login    # ADC, used by the Terraform provider
+gcloud config set project YOUR_GCP_PROJECT_ID
+```
+
+Then confirm the project has billing enabled:
+
+```bash
+gcloud beta billing projects describe YOUR_GCP_PROJECT_ID
+```
+
 ## 🚀 Quick Start
 
-Follow these steps to deploy the system automatically:
+Make sure `gcloud`, `kubectl`, `terraform` and `docker` are installed and that you
+are authenticated (see [Requirements & Installation](#-requirements--installation)),
+then follow these steps to deploy the system automatically:
 
 ### 1. Clone the repository and enter the directory
 ```bash
@@ -107,14 +344,6 @@ curl -X POST http://localhost:8080/plan \
 - ✅ **Simple** - Easy to deploy and understand
 - ✅ **Production-Ready** - Health checks, monitoring
 
-## 🛠️ Prerequisites
-
-- [Google Cloud SDK](https://cloud.google.com/sdk/docs/install)
-- [kubectl](https://kubernetes.io/docs/tasks/tools/)
-- [Terraform](https://terraform.io/downloads)
-- [Docker](https://docs.docker.com/get-docker/)
-- Google Cloud Project with billing enabled
-
 ## 📚 Commands Reference
 
 ### Deployment
@@ -125,6 +354,7 @@ curl -X POST http://localhost:8080/plan \
 
 ### Testing
 ```bash
+pip install requests                           # only dependency of the test script
 python3 scripts/test_adk_demo.py               # Automated tests
 python3 scripts/test_adk_demo.py --quick       # Quick tests
 ```
