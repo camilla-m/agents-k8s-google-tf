@@ -239,9 +239,24 @@ run the deployment from Git Bash:
 Do this once, on every platform, before running the deployment:
 
 ```bash
-gcloud auth login                        # your user account, for gcloud/terraform
-gcloud auth application-default login    # ADC, used by the Terraform provider
+gcloud auth login                        # your user account, for the gcloud CLI
+gcloud auth application-default login    # ADC, used by the Terraform google provider
 gcloud config set project YOUR_GCP_PROJECT_ID
+gcloud auth application-default set-quota-project YOUR_GCP_PROJECT_ID
+```
+
+`gcloud auth login` and `gcloud auth application-default login` are two different
+credential stores. Terraform never reads the first one: the `google` provider only
+reads Application Default Credentials (ADC), so **both** commands are required.
+Running only `gcloud auth login` makes `terraform plan`/`apply` fail with
+`Attempted to load application default credentials ... No credentials loaded`.
+
+Confirm ADC is in place before running Terraform:
+
+```bash
+ls ~/.config/gcloud/application_default_credentials.json   # Linux/macOS
+# Windows: %APPDATA%\gcloud\application_default_credentials.json
+gcloud auth application-default print-access-token >/dev/null && echo "ADC OK"
 ```
 
 Then confirm the project has billing enabled:
@@ -249,6 +264,10 @@ Then confirm the project has billing enabled:
 ```bash
 gcloud beta billing projects describe YOUR_GCP_PROJECT_ID
 ```
+
+> If `gcloud` is installed but the shell reports `command not found`, the SDK is not
+> on your `PATH` yet. Open a new terminal, or source the SDK init file for your shell:
+> `source ~/google-cloud-sdk/path.zsh.inc` (zsh) / `source ~/google-cloud-sdk/path.bash.inc` (bash).
 
 ## 🚀 Quick Start
 
@@ -376,6 +395,35 @@ python3 scripts/test_adk_demo.py --quick       # Quick tests
 - **Efficient resource requests** and limits
 
 ## 🚨 Troubleshooting
+
+### `Error: Attempted to load application default credentials ... No credentials loaded`
+
+Full error from `terraform plan` / `terraform apply`:
+
+```
+Error: Attempted to load application default credentials since neither `credentials`
+nor `access_token` was set in the provider block. No credentials loaded.
+To use your gcloud credentials, run 'gcloud auth application-default login'
+```
+
+The `google` provider in `terraform/main.tf` sets no `credentials` argument on purpose,
+so it falls back to Application Default Credentials. The error means ADC is missing,
+expired, or pointing at another project. Fix:
+
+```bash
+gcloud auth application-default login
+gcloud auth application-default set-quota-project YOUR_GCP_PROJECT_ID
+gcloud auth application-default print-access-token >/dev/null && echo "ADC OK"
+cd terraform && terraform plan
+```
+
+Notes:
+- `gcloud auth login` alone is **not** enough, it does not write ADC.
+- If `gcloud` is not found, source the SDK path file or open a new terminal (see
+  [Authenticate with Google Cloud](#authenticate-with-google-cloud)).
+- In CI, set `GOOGLE_APPLICATION_CREDENTIALS` to a service account key file instead,
+  or use Workload Identity Federation.
+- To wipe stale ADC: `gcloud auth application-default revoke`, then log in again.
 
 ### Common Issues
 ```bash
