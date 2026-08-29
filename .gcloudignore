@@ -1,0 +1,28 @@
+# Files excluded from the source archive uploaded by `gcloud builds submit`.
+#
+# The Dockerfile only needs requirements.txt, agents/ and main.py. Everything else
+# here is either irrelevant to the image or actively harmful to upload: terraform/
+# alone is ~109 MB once .terraform/ has downloaded its providers, and would be sent
+# to Cloud Build on every single deploy.
+
+.git/
+.gitignore
+.gcloudignore
+
+# Terraform: providers, state, and tfvars (which hold real values)
+terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+
+# Not copied into the image
+k8s/
+scripts/
+ui/
+README.md
+
+# Local Python noise
+__pycache__/
+*.pyc
+.venv/
+venv/

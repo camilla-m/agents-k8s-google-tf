@@ -37,8 +37,16 @@ print_error() {
 }
 
 # Validation
-if [ $# -lt 1 ] || [ $# -gt 3 ]; then
-    echo "Usage: $0 PROJECT_ID [REGION] [CLUSTER_NAME]"
+usage() {
+    echo "Usage: $0 PROJECT_ID [REGION] [CLUSTER_NAME] [--cloud-build]"
+    echo ""
+    echo "Options:"
+    echo "  --cloud-build   Build and push the image with Cloud Build instead of the"
+    echo "                  local Docker daemon. The image never crosses your network,"
+    echo "                  which avoids the intermittent 'connection refused' from the"
+    echo "                  Artifact Registry frontends, and drops the need for a local"
+    echo "                  amd64 cross-build. Requires cloudbuild.googleapis.com and"
+    echo "                  roles/artifactregistry.writer on the build service account."
     echo ""
     echo "Project structure expected (one level up from scripts/):"
     echo "  ├── Dockerfile          # Main Dockerfile in root"
@@ -47,16 +55,38 @@ if [ $# -lt 1 ] || [ $# -gt 3 ]; then
     echo "  └── scripts/           # This script location"
     echo ""
     exit 1
+}
+
+# Separate the --cloud-build flag from the positional arguments so it can be passed
+# in any position, not just last.
+USE_CLOUD_BUILD="false"
+POSITIONAL=()
+for arg in "$@"; do
+    case "$arg" in
+        --cloud-build) USE_CLOUD_BUILD="true" ;;
+        -h|--help)     usage ;;
+        -*)            echo "Unknown option: $arg"; echo ""; usage ;;
+        *)             POSITIONAL+=("$arg") ;;
+    esac
+done
+
+if [ ${#POSITIONAL[@]} -lt 1 ] || [ ${#POSITIONAL[@]} -gt 3 ]; then
+    usage
 fi
 
-PROJECT_ID="$1"
-REGION="${2:-$DEFAULT_REGION}"
-CLUSTER_NAME="${3:-$DEFAULT_CLUSTER_NAME}"
+PROJECT_ID="${POSITIONAL[0]}"
+REGION="${POSITIONAL[1]:-$DEFAULT_REGION}"
+CLUSTER_NAME="${POSITIONAL[2]:-$DEFAULT_CLUSTER_NAME}"
 
 print_status "🚀 Deploying ADK Travel (Modified Structure)"
 print_status "Project: $PROJECT_ID"
 print_status "Region: $REGION"
 print_status "Cluster: $CLUSTER_NAME"
+if [ "$USE_CLOUD_BUILD" = "true" ]; then
+    print_status "Image build: Cloud Build (remote)"
+else
+    print_status "Image build: local Docker daemon"
+fi
 
 # Store current directory and determine project root
 SCRIPT_DIR="$(pwd)"
@@ -121,7 +151,15 @@ print_success "✅ Project structure validated"
 
 # Check prerequisites
 print_status "🔧 Checking prerequisites..."
-for cmd in gcloud kubectl docker; do
+REQUIRED_CMDS=(gcloud kubectl)
+# With --cloud-build the image is built remotely, so a local Docker daemon is not
+# needed at all - which is the whole point when running from Cloud Shell or a machine
+# whose Docker cannot reach the registry.
+if [ "$USE_CLOUD_BUILD" != "true" ]; then
+    REQUIRED_CMDS+=(docker)
+fi
+
+for cmd in "${REQUIRED_CMDS[@]}"; do
     if ! command -v $cmd &> /dev/null; then
         print_error "$cmd is required but not installed"
     fi
@@ -138,6 +176,10 @@ REQUIRED_APIS=(
     "compute.googleapis.com"
     "aiplatform.googleapis.com"
 )
+
+if [ "$USE_CLOUD_BUILD" = "true" ]; then
+    REQUIRED_APIS+=("cloudbuild.googleapis.com")
+fi
 
 for api in "${REQUIRED_APIS[@]}"; do
     if ! gcloud services list --enabled --filter="name:$api" --format="value(name)" | grep -q "^$api$"; then
@@ -171,8 +213,12 @@ else
 fi
 
 # Configure Docker authentication
-print_status "🔐 Configuring Docker authentication..."
-gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+# Only needed for local pushes: Cloud Build authenticates to Artifact Registry with its
+# own service account and never reads ~/.docker/config.json.
+if [ "$USE_CLOUD_BUILD" != "true" ]; then
+    print_status "🔐 Configuring Docker authentication..."
+    gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+fi
 
 # Connect to cluster
 print_status "☸️  Connecting to cluster..."
@@ -195,27 +241,10 @@ else
     print_success "Namespace already exists"
 fi
 
-# Build Docker image
-print_status "🏗️  Building Docker image..."
+# Build and push the image
 IMAGE_TAG="$REGISTRY_URL/$IMAGE_NAME:$(date +%Y%m%d-%H%M%S)"
 IMAGE_LATEST="$REGISTRY_URL/$IMAGE_NAME:latest"
 
-print_status "Building image: $IMAGE_TAG"
-print_status "Building from directory: $(pwd)"
-
-# Build from current directory (which is now the parent directory).
-# --platform linux/amd64 is required: GKE's default node pool (e2-standard-4) is amd64,
-# but `docker build` defaults to the host's architecture. Built on Apple Silicon/arm64
-# without this flag, the image ends up arm64-only and every pod fails to start with
-# ImagePullBackOff / "no match for platform in manifest".
-if docker build --platform linux/amd64 -t "$IMAGE_TAG" -t "$IMAGE_LATEST" .; then
-    print_success "✅ Docker image built successfully"
-else
-    print_error "❌ Docker build failed"
-fi
-
-# Push Docker image
-#
 # Artifact Registry is fronted by an anycast pool (googlecode.l.googleusercontent.com).
 # Individual frontends there intermittently refuse the connection, which surfaces as
 # `dial tcp <ip>:443: connect: connection refused` partway through the blob uploads and
@@ -244,10 +273,53 @@ push_with_retry() {
     done
 }
 
-print_status "📤 Pushing Docker image..."
-push_with_retry "$IMAGE_TAG"
-push_with_retry "$IMAGE_LATEST"
-print_success "✅ Image pushed to registry"
+if [ "$USE_CLOUD_BUILD" = "true" ]; then
+    # Remote path: Cloud Build builds AND pushes (see the `images:` block in
+    # cloudbuild.yaml), so nothing here ever talks to the registry directly.
+    print_status "☁️  Building and pushing via Cloud Build..."
+    print_status "Building image: $IMAGE_TAG"
+    print_status "Source directory: $(pwd)"
+
+    if [ ! -f "cloudbuild.yaml" ]; then
+        print_error "cloudbuild.yaml not found in $(pwd) - required for --cloud-build"
+    fi
+
+    # .gcloudignore keeps terraform/ (~109 MB of downloaded providers) and the rest of
+    # the repo out of the uploaded source archive.
+    if gcloud builds submit \
+        --region="$REGION" \
+        --config=cloudbuild.yaml \
+        --substitutions="_IMAGE_TAG=$IMAGE_TAG,_IMAGE_LATEST=$IMAGE_LATEST" \
+        .; then
+        print_success "✅ Image built and pushed by Cloud Build"
+    else
+        print_error "❌ Cloud Build failed. If the log ends in a permissions error, grant the build service account write access:
+    PROJECT_NUMBER=\$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
+    gcloud projects add-iam-policy-binding $PROJECT_ID \\
+      --member=\"serviceAccount:\$PROJECT_NUMBER-compute@developer.gserviceaccount.com\" \\
+      --role=roles/artifactregistry.writer"
+    fi
+else
+    # Local path: build here, then push over your own network.
+    print_status "🏗️  Building Docker image..."
+    print_status "Building image: $IMAGE_TAG"
+    print_status "Building from directory: $(pwd)"
+
+    # --platform linux/amd64 is required: GKE's default node pool (e2-standard-4) is
+    # amd64, but `docker build` defaults to the host's architecture. Built on Apple
+    # Silicon/arm64 without this flag, the image ends up arm64-only and every pod fails
+    # to start with ImagePullBackOff / "no match for platform in manifest".
+    if docker build --platform linux/amd64 -t "$IMAGE_TAG" -t "$IMAGE_LATEST" .; then
+        print_success "✅ Docker image built successfully"
+    else
+        print_error "❌ Docker build failed"
+    fi
+
+    print_status "📤 Pushing Docker image..."
+    push_with_retry "$IMAGE_TAG"
+    push_with_retry "$IMAGE_LATEST"
+    print_success "✅ Image pushed to registry"
+fi
 
 # Apply Kubernetes manifests
 print_status "☸️  Applying Kubernetes manifests..."
