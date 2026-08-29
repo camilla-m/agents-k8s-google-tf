@@ -395,33 +395,43 @@ kubectl logs <pod-name> -n adk-travel
 
 ```
 failed to do request: Head "https://us-central1-docker.pkg.dev/v2/<project>/adk-travel/<image>/blobs/sha256:...":
-dial tcp 74.125.134.82:443: connect: connection refused
+dial tcp 142.251.107.82:443: connect: connection refused
 ```
 
-This is a **network** failure, not an authentication one (auth problems return `401`
-or `denied`, never `connection refused`). `us-central1-docker.pkg.dev` is served by
-an anycast pool, and the Docker daemon occasionally picks an IP that is not routable
-from your machine or VM.
+This is a **network** failure on Google's side, not an authentication one (auth problems
+return `401` or `denied`, never `connection refused`), and not something wrong with your
+machine. `us-central1-docker.pkg.dev` is served by an anycast pool behind
+`googlecode.l.googleusercontent.com`, and individual frontends in that pool
+intermittently refuse the connection. The same error reproduces from a laptop and from
+Cloud Shell, on different IPs each time, and the refusing IPs answer normally again
+minutes later.
 
-Confirm the registry is reachable before you retry:
+`scripts/deploy.sh` now retries the push up to 5 times with exponential backoff, which
+absorbs this. Blobs that already uploaded are skipped, so retries are cheap. If you are
+pushing by hand, just run the command again.
+
+To confirm the pool is healthy before retrying (a `401` is the CORRECT answer here - the
+endpoint requires a token):
 
 ```bash
-# From the host - a 401 here is the CORRECT answer (the endpoint requires a token)
-curl -sS -o /dev/null -w "%{http_code} %{remote_ip}\n" https://us-central1-docker.pkg.dev/v2/
+for ip in $(dig +short us-central1-docker.pkg.dev A | grep -E '^[0-9]'); do
+  printf "%-16s " "$ip"
+  curl -sS -o /dev/null -w "%{http_code}\n" --max-time 8 \
+    --resolve "us-central1-docker.pkg.dev:443:$ip" \
+    https://us-central1-docker.pkg.dev/v2/
+done
+```
 
-# From inside the Docker VM (Rancher Desktop, Colima, Docker Desktop),
-# which is the network namespace that actually performs the push
+If every IP hangs or is refused for several minutes straight, the block is local rather
+than transient: check your VPN, corporate proxy, or the `HTTP_PROXY` / `HTTPS_PROXY`
+variables in your shell and in your container runtime's settings. Note that on macOS the
+push runs inside your container runtime's VM (Rancher Desktop, Colima, Docker Desktop),
+so test from there too:
+
+```bash
 docker run --rm alpine:3.20 sh -c \
   'apk add -q curl && curl -sS -o /dev/null -w "%{http_code} %{remote_ip}\n" https://us-central1-docker.pkg.dev/v2/'
 ```
-
-If both print `401`, the path is healthy and the failure was transient - just run
-`./scripts/deploy.sh` again. A failed push does not leave a usable local image, so
-re-run the whole script rather than repeating `docker push` on its own.
-
-If either command hangs or is refused, the block is outside Docker: check your VPN,
-corporate proxy, or the `HTTP_PROXY` / `HTTPS_PROXY` variables in your shell and in
-your container runtime's settings.
 
 ### `docker push` fails with `denied` / `unauthorized`
 

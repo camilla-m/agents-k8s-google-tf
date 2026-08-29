@@ -215,9 +215,38 @@ else
 fi
 
 # Push Docker image
+#
+# Artifact Registry is fronted by an anycast pool (googlecode.l.googleusercontent.com).
+# Individual frontends there intermittently refuse the connection, which surfaces as
+# `dial tcp <ip>:443: connect: connection refused` partway through the blob uploads and
+# kills the whole deploy under `set -e`. It is not an auth failure and not specific to
+# any network - it reproduces from a laptop and from Cloud Shell alike. Retrying picks a
+# different frontend, and already-uploaded blobs are skipped, so retries are cheap.
+push_with_retry() {
+    local image="$1"
+    local attempt=1
+    local max_attempts=5
+    local delay=5
+
+    while [ "$attempt" -le "$max_attempts" ]; do
+        if docker push "$image"; then
+            return 0
+        fi
+
+        if [ "$attempt" -eq "$max_attempts" ]; then
+            print_error "❌ Failed to push $image after $max_attempts attempts"
+        fi
+
+        print_warning "Push attempt $attempt/$max_attempts failed, retrying in ${delay}s..."
+        sleep "$delay"
+        attempt=$((attempt + 1))
+        delay=$((delay * 2))
+    done
+}
+
 print_status "📤 Pushing Docker image..."
-docker push "$IMAGE_TAG"
-docker push "$IMAGE_LATEST"
+push_with_retry "$IMAGE_TAG"
+push_with_retry "$IMAGE_LATEST"
 print_success "✅ Image pushed to registry"
 
 # Apply Kubernetes manifests
