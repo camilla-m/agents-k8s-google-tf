@@ -391,6 +391,67 @@ kubectl describe pod <pod-name> -n adk-travel
 kubectl logs <pod-name> -n adk-travel
 ```
 
+### `docker push` fails with `connection refused`
+
+```
+failed to do request: Head "https://us-central1-docker.pkg.dev/v2/<project>/adk-travel/<image>/blobs/sha256:...":
+dial tcp 74.125.134.82:443: connect: connection refused
+```
+
+This is a **network** failure, not an authentication one (auth problems return `401`
+or `denied`, never `connection refused`). `us-central1-docker.pkg.dev` is served by
+an anycast pool, and the Docker daemon occasionally picks an IP that is not routable
+from your machine or VM.
+
+Confirm the registry is reachable before you retry:
+
+```bash
+# From the host - a 401 here is the CORRECT answer (the endpoint requires a token)
+curl -sS -o /dev/null -w "%{http_code} %{remote_ip}\n" https://us-central1-docker.pkg.dev/v2/
+
+# From inside the Docker VM (Rancher Desktop, Colima, Docker Desktop),
+# which is the network namespace that actually performs the push
+docker run --rm alpine:3.20 sh -c \
+  'apk add -q curl && curl -sS -o /dev/null -w "%{http_code} %{remote_ip}\n" https://us-central1-docker.pkg.dev/v2/'
+```
+
+If both print `401`, the path is healthy and the failure was transient - just run
+`./scripts/deploy.sh` again. A failed push does not leave a usable local image, so
+re-run the whole script rather than repeating `docker push` on its own.
+
+If either command hangs or is refused, the block is outside Docker: check your VPN,
+corporate proxy, or the `HTTP_PROXY` / `HTTPS_PROXY` variables in your shell and in
+your container runtime's settings.
+
+### `docker push` fails with `denied` / `unauthorized`
+
+The Artifact Registry credential helper is missing from `~/.docker/config.json`.
+It should contain:
+
+```json
+{
+  "credHelpers": {
+    "us-central1-docker.pkg.dev": "gcloud"
+  }
+}
+```
+
+`scripts/deploy.sh` registers it automatically, but some tools (Rancher Desktop and
+Docker Desktop among them) rewrite `config.json` and drop the entry. Re-add it with:
+
+```bash
+gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+```
+
+### `gcloud: command not found` while the SDK is installed
+
+The installer appends `gcloud` to your shell rc file, so it is missing from
+non-interactive shells (scripts, CI, IDE terminals). Prepend it explicitly:
+
+```bash
+export PATH="$HOME/google-cloud-sdk/bin:$PATH"   # or the path from `which gcloud`
+```
+
 ### Useful Debug Commands
 ```bash
 kubectl get events --sort-by='.lastTimestamp' -n adk-travel
