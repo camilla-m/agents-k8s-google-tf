@@ -313,6 +313,24 @@ There's also a small standalone test page at [ui/index.html](ui/index.html) - op
 directly in a browser (no server needed) and point it at your LoadBalancer IP or
 `http://localhost:8080` if you're port-forwarding.
 
+#### From Cloud Shell, without a public IP
+
+`localhost` in a Cloud Shell tab is the Cloud Shell VM, not your laptop, so the URLs
+above do not open in your browser directly. Use **Web Preview**, which tunnels a port of
+that VM to an HTTPS URL authenticated as your own Google account - nothing is published:
+
+```bash
+# leave this running; open a second Cloud Shell tab for anything else
+kubectl port-forward service/travel-adk-coordinator 8080:80 -n adk-travel
+```
+
+Then click **Web Preview** (the eye icon, top right of the Cloud Shell toolbar) →
+**Preview on port 8080**. It opens `https://8080-cs-XXXX.cloudshell.dev/`; append
+`/dev-ui/` to reach the ADK console.
+
+This is the preferred way to demo from the console. It needs no LoadBalancer, no
+external IP, and exposes nothing to the internet.
+
 ## 🧪 Testing the Agents
 
 ### Health Check
@@ -392,8 +410,44 @@ python3 scripts/test_adk_demo.py --quick       # Quick tests
 
 ## 🔐 Security
 
-- **Workload Identity** for secure GCP service authentication
-- **Non-root containers** for enhanced security
+- **Workload Identity** for GCP service authentication - no service account key files
+  in the image or in the cluster (see [`k8s/sa.yaml`](k8s/sa.yaml))
+- **Non-root containers** - the image runs as uid/gid 1000, with the root filesystem
+  and capabilities locked down in [`k8s/coordinator-deployment.yaml`](k8s/coordinator-deployment.yaml)
+
+### ⚠️ The application itself is unauthenticated
+
+`main.py` has no authentication of any kind: no `Depends`, no middleware, no API key.
+Every route is open - `/dev-ui`, `/chat`, `/plan`, `/agent/{type}/chat`, `/stats`,
+`/metrics`.
+
+The coordinator Service is declared as `type: LoadBalancer`, so **applying the
+manifests as-is publishes all of that to the public internet**. Anyone who finds the
+external IP can drive your agents, and every prompt they send calls Vertex AI billed to
+your project.
+
+Check what is currently exposed:
+
+```bash
+kubectl get svc travel-adk-coordinator -n adk-travel
+```
+
+An address under `EXTERNAL-IP` means it is live on the internet.
+
+This is fine for a short, watched demo. It is not fine to leave running. Three ways to
+close it, cheapest first:
+
+1. **Switch the Service to `ClusterIP`** and reach the UI through port-forward or
+   Cloud Shell Web Preview (see [Test the agents](#3-test-the-agents)). One line in the
+   manifest, and the deployment stops being reachable from outside the cluster.
+2. **Restrict the LoadBalancer** with `loadBalancerSourceRanges` on the Service, listing
+   only the IPs that should reach it. Still public, but filtered.
+3. **Put IAP (Identity-Aware Proxy) in front**, so viewers sign in with a Google
+   account. The right answer for an open demo, but it needs an Ingress, a managed
+   certificate and OAuth configuration.
+
+Whichever you choose, delete the deployment when the demo is over -
+see [Cleanup](#cleanup).
 
 ## 💰 Cost Optimization
 
@@ -587,7 +641,7 @@ Perfect for presentations and demos:
 # 1. Show the deployment
 kubectl get all -n adk-travel
 
-# 2. Port forward for demo
+# 2. Port forward for demo (from Cloud Shell, pair this with Web Preview on port 8080)
 kubectl port-forward service/travel-adk-coordinator 8080:80 -n adk-travel &
 
 # 3. Demo the AI agents
@@ -597,6 +651,10 @@ curl -X POST http://localhost:8080/chat -H "Content-Type: application/json" \
 # 4. Show real-time logs
 kubectl logs -f deployment/travel-adk-coordinator -n adk-travel --tail=10
 ```
+
+The agents are unauthenticated and the Service defaults to `type: LoadBalancer`. Tear
+the deployment down once the demo ends, or close it off first - see
+[Security](#-security).
 
 ## 🤝 Contributing
 
